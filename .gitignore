@@ -1,0 +1,14 @@
+node_modules/
+dist/
+dist-server/
+dist-electron/
+release/
+.env
+.env.*
+!.env.example
+.vercel/
+data/
+prisma/*.db*
+test-results/
+playwright-report/
+*.log

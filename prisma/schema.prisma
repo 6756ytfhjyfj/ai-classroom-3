@@ -1,0 +1,226 @@
+generator client {
+  provider = "prisma-client-js"
+}
+datasource db {
+  provider = "sqlite"
+  url = env("DATABASE_URL")
+}
+model User {
+  id String @id @default(uuid())
+  username String @unique
+  displayName String
+  passwordHash String
+  recoveryHash String?
+  avatar String @default("✦")
+  role String @default("STUDENT")
+  status String @default("ACTIVE")
+  preferences String @default("{}")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  bindings DeviceAccountBinding[]
+  sessions AuthSession[]
+  classrooms Classroom[]
+  recoveryRequests RecoveryRequest[]
+}
+model Device {
+  id String @id @default(uuid())
+  registrationIdentifier String @unique
+  status String @default("ACTIVE")
+  lockVersion Int @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  installations Installation[]
+  bindings DeviceAccountBinding[]
+  sessions AuthSession[]
+}
+model Installation {
+  id String @id
+  deviceId String
+  device Device @relation(fields:[deviceId], references:[id])
+  createdAt DateTime @default(now())
+  lastSeenAt DateTime @default(now())
+}
+model DeviceAccountBinding {
+  id String @id @default(uuid())
+  deviceId String
+  userId String
+  slot Int?
+  bindingStatus String @default("ACTIVE")
+  createdAt DateTime @default(now())
+  device Device @relation(fields:[deviceId], references:[id])
+  user User @relation(fields:[userId], references:[id])
+  @@unique([deviceId, userId])
+  @@unique([deviceId, slot])
+}
+model AuthSession {
+  id String @id
+  userId String
+  deviceId String
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime @default(now())
+  user User @relation(fields:[userId], references:[id])
+  device Device @relation(fields:[deviceId], references:[id])
+  @@index([userId, expiresAt])
+}
+model Subject {
+  id String @id
+  name String
+  prompt String
+  classrooms Classroom[]
+}
+model Classroom {
+  id String @id @default(uuid())
+  userId String
+  subjectId String
+  title String
+  mode String @default("qa")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user User @relation(fields:[userId], references:[id])
+  subject Subject @relation(fields:[subjectId], references:[id])
+  conversation Conversation?
+  visualization VisualizationState?
+  handwriting HandwritingDocument?
+  sessions LearningSession[]
+  plans TeachingPlan[]
+  progress TeachingProgress[]
+  skills SkillExecution[]
+  voices VoiceSessionMetadata[]
+  @@index([userId, updatedAt])
+}
+model LearningSession {
+  id String @id @default(uuid())
+  classroomId String
+  startedAt DateTime @default(now())
+  endedAt DateTime?
+  classroom Classroom @relation(fields:[classroomId], references:[id], onDelete:Cascade)
+}
+model Conversation {
+  id String @id @default(uuid())
+  classroomId String @unique
+  classroom Classroom @relation(fields:[classroomId], references:[id], onDelete:Cascade)
+  messages Message[]
+}
+model Message {
+  id String @id @default(uuid())
+  conversationId String
+  role String
+  content String
+  metadata String @default("{}")
+  status String @default("COMPLETE")
+  createdAt DateTime @default(now())
+  conversation Conversation @relation(fields:[conversationId], references:[id], onDelete:Cascade)
+  @@index([conversationId, createdAt])
+}
+model TeachingPlan {
+  id String @id @default(uuid())
+  classroomId String
+  data String
+  createdAt DateTime @default(now())
+  classroom Classroom @relation(fields:[classroomId], references:[id], onDelete:Cascade)
+}
+model TeachingProgress {
+  id String @id @default(uuid())
+  classroomId String
+  data String
+  updatedAt DateTime @updatedAt
+  classroom Classroom @relation(fields:[classroomId], references:[id], onDelete:Cascade)
+}
+model HandwritingDocument {
+  id String @id @default(uuid())
+  classroomId String @unique
+  revision Int @default(0)
+  data String
+  updatedAt DateTime @updatedAt
+  classroom Classroom @relation(fields:[classroomId], references:[id], onDelete:Cascade)
+  strokes HandwritingStroke[]
+  recognitions RecognitionResult[]
+}
+model HandwritingStroke {
+  id String @id @default(uuid())
+  documentId String
+  data String
+  document HandwritingDocument @relation(fields:[documentId], references:[id], onDelete:Cascade)
+}
+model RecognitionResult {
+  id String @id @default(uuid())
+  documentId String
+  revision Int
+  content String
+  kind String
+  createdAt DateTime @default(now())
+  document HandwritingDocument @relation(fields:[documentId], references:[id], onDelete:Cascade)
+}
+model VoiceSessionMetadata {
+  id String @id @default(uuid())
+  classroomId String
+  engine String
+  language String
+  durationMs Int
+  createdAt DateTime @default(now())
+  classroom Classroom @relation(fields:[classroomId], references:[id], onDelete:Cascade)
+}
+model SkillDefinition {
+  id String @id
+  enabled Boolean @default(true)
+  config String @default("{}")
+  updatedAt DateTime @updatedAt
+}
+model SkillExecution {
+  id String @id @default(uuid())
+  classroomId String
+  skillId String
+  input String
+  output String
+  status String
+  createdAt DateTime @default(now())
+  classroom Classroom @relation(fields:[classroomId], references:[id], onDelete:Cascade)
+}
+model VisualizationState {
+  id String @id @default(uuid())
+  classroomId String @unique
+  revision Int @default(0)
+  data String
+  updatedAt DateTime @updatedAt
+  classroom Classroom @relation(fields:[classroomId], references:[id], onDelete:Cascade)
+}
+model AIProviderConfig {
+  id String @id
+  encryptedKey String
+  baseUrl String
+  model String
+  enabled Boolean @default(true)
+  subjectMap String @default("[]")
+  vision Boolean @default(false)
+  timeoutMs Int @default(60000)
+  updatedAt DateTime @updatedAt
+}
+model SpeechProviderConfig {
+  id String @id
+  data String
+  encryptedKey String?
+  updatedAt DateTime @updatedAt
+}
+model AdministratorAuditLog {
+  id String @id @default(uuid())
+  actorId String
+  action String
+  targetId String
+  detail String
+  createdAt DateTime @default(now())
+  @@index([createdAt])
+}
+model SystemSettings {
+  id String @id
+  data String
+}
+model RecoveryRequest {
+  id String @id @default(uuid())
+  userId String?
+  type String
+  detail String
+  status String @default("PENDING")
+  createdAt DateTime @default(now())
+  user User? @relation(fields:[userId], references:[id])
+}

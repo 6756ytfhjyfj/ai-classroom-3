@@ -1,0 +1,120 @@
+{
+  "name": "ai-classroom",
+  "version": "3.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Windows pen-first AI classroom",
+  "main": "dist-electron/main.cjs",
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "dev:web": "vite --host 127.0.0.1",
+    "dev:server": "tsx watch server/index.ts",
+    "db:generate": "prisma generate --schema prisma/schema.prisma",
+    "db:migrate": "prisma migrate deploy --schema prisma/schema.prisma",
+    "setup": "node scripts/setup.mjs",
+    "admin:create": "tsx server/cli.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:e2e": "playwright test",
+    "build": "npm run typecheck && vite build && node scripts/build.mjs",
+    "build:cloud": "prisma generate --schema prisma/postgres/schema.prisma && npm run typecheck && vite build",
+    "start": "node dist-server/index.cjs",
+    "desktop": "electron .",
+    "package:win": "npm run build && electron-builder --win nsis --x64",
+    "package:portable": "npm run build && electron-builder --win dir --x64",
+    "db:postgres": "node scripts/postgres.mjs"
+  },
+  "dependencies": {
+    "@ai-sdk/deepseek": "^3.0.72",
+    "@ai-sdk/google": "^4.0.104",
+    "@fastify/cookie": "^11.0.2",
+    "@fastify/helmet": "^13.0.2",
+    "@fastify/rate-limit": "^10.3.0",
+    "@fastify/static": "^8.3.0",
+    "@node-rs/argon2": "^2.0.2",
+    "@prisma/client": "6.19.0",
+    "ai": "7.0.150",
+    "dotenv": "^17.2.3",
+    "fastify": "^5.6.1",
+    "katex": "^0.16.25",
+    "lucide-react": "^0.468.0",
+    "motion": "^12.23.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "react-markdown": "^10.1.0",
+    "rehype-katex": "^7.0.1",
+    "remark-math": "^6.0.0",
+    "zod": "^4.1.0",
+    "zustand": "^5.0.8"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.56.1",
+    "@types/katex": "^0.16.7",
+    "@types/node": "^24.10.0",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@vitejs/plugin-react": "^5.1.0",
+    "electron": "45.0.0",
+    "electron-builder": "^26.0.12",
+    "esbuild": "^0.27.0",
+    "prettier": "^3.9.10",
+    "prisma": "6.19.0",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3",
+    "vite": "^7.2.0",
+    "vitest": "^3.2.4"
+  },
+  "build": {
+    "appId": "org.aiclassroom.desktop",
+    "productName": "AI Classroom",
+    "asar": true,
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**",
+      "dist-server/**",
+      "dist-electron/**",
+      "node_modules/.prisma/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "prisma/migrations",
+        "to": "prisma/migrations"
+      },
+      {
+        "from": "electron/native-speech.ps1",
+        "to": "electron/native-speech.ps1"
+      },
+      {
+        "from": "node_modules/.prisma/client",
+        "to": "node_modules/.prisma/client"
+      },
+      {
+        "from": "node_modules/@prisma/client/runtime",
+        "to": "node_modules/@prisma/client/runtime"
+      },
+      {
+        "from": "node_modules/@prisma/client/package.json",
+        "to": "node_modules/@prisma/client/package.json"
+      }
+    ],
+    "asarUnpack": [
+      "node_modules/.prisma/**",
+      "node_modules/@prisma/**",
+      "node_modules/@node-rs/**",
+      "node_modules/@napi-rs/**"
+    ],
+    "win": {
+      "target": "nsis",
+      "artifactName": "AI-Classroom-3.0.0-Setup.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "deleteAppDataOnUninstall": false
+    }
+  }
+}
