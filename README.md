@@ -1,5 +1,7 @@
 # AI Classroom 3.0 · Windows 工程版
 
+**[网页版](https://ai-classroom-3-sand.vercel.app) · [Windows 下载](https://github.com/6756ytfhjyfj/ai-classroom-3/releases/tag/v3.0.0) · [简易使用指南](docs/QUICKSTART.zh-CN.md) · [公网部署说明](docs/CLOUD-DEPLOYMENT.md)**
+
 这是可运行的 Electron 桌面应用与独立 Fastify 服务端，使用真实数据库、Canvas 笔迹和可计算实验。模型尚未配置时会明确提示，不输出模拟的 AI 回答。源码、数据库迁移、自动化测试和打包脚本随项目提供。
 
 ## 直接使用 Windows 安装包
