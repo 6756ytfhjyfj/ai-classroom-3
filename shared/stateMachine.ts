@@ -1,4 +1,4 @@
-import type { ClassroomState } from "./protocol";
+import type { ClassroomState } from "./protocol.js";
 const control = new Set<ClassroomState>([
   "IDLE",
   "AI_INTERRUPTED",

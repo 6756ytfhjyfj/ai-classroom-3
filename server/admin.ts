@@ -1,17 +1,17 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { db, audit, serialized } from "./db";
-import { adminOnly } from "./auth";
+import { db, audit, serialized } from "./db.js";
+import { adminOnly } from "./auth.js";
 import {
   encrypt,
   AppError,
   validateProviderUrl,
   digest,
   token,
-} from "./security";
-import { AIProvider, providerError } from "./providers";
-import { skillRegistry } from "../shared/skills";
-import { subjectId } from "../shared/protocol";
+} from "./security.js";
+import { AIProvider, providerError } from "./providers.js";
+import { skillRegistry } from "../shared/skills.js";
+import { subjectId } from "../shared/protocol.js";
 export async function adminRoutes(app: FastifyInstance) {
   app.addHook("preHandler", adminOnly);
   app.get("/api/admin/overview", async () => ({

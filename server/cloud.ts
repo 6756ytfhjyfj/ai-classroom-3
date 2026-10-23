@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { createApp } from "./app";
+import { createApp } from "./app.js";
 
 // Reuse one Prisma pool and Fastify instance per warm function process.
 let appPromise: ReturnType<typeof createApp> | undefined;

@@ -1,6 +1,6 @@
 import { PrismaClient } from "@prisma/client";
-import { subjects } from "../shared/protocol";
-import { skillRegistry } from "../shared/skills";
+import { subjects } from "../shared/protocol.js";
+import { skillRegistry } from "../shared/skills.js";
 export const db = new PrismaClient();
 export async function seed() {
   for (const s of subjects)

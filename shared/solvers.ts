@@ -1,4 +1,4 @@
-import type { CircuitComponent } from "./protocol";
+import type { CircuitComponent } from "./protocol.js";
 
 /** Modified nodal analysis. Ideal voltage sources, resistive lamps; no AC model. */
 export function solveCircuit(components: CircuitComponent[]): {

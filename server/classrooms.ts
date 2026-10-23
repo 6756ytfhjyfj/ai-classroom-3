@@ -2,10 +2,10 @@ import { randomUUID } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { tool, type ToolSet, type ModelMessage } from "ai";
-import { db } from "./db";
-import { authenticate } from "./auth";
-import { AppError } from "./security";
-import { providerFor, providerError } from "./providers";
+import { db } from "./db.js";
+import { authenticate } from "./auth.js";
+import { AppError } from "./security.js";
+import { providerFor, providerError } from "./providers.js";
 import {
   subjectId,
   initialLab,
@@ -13,8 +13,8 @@ import {
   inkSchema,
   type StreamEvent,
   type SubjectId,
-} from "../shared/protocol";
-import { skillRegistry, executeSkill } from "../shared/skills";
+} from "../shared/protocol.js";
+import { skillRegistry, executeSkill } from "../shared/skills.js";
 export const activeRequests = new Map<string, AbortController>();
 async function owned(id: string, userId: string) {
   const c = await db.classroom.findFirst({ where: { id, userId } });

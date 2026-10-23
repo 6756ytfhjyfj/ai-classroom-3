@@ -14,7 +14,7 @@ npx prisma migrate deploy --schema prisma/postgres/schema.prisma
 
 迁移账号仅用于部署终端，不作为运行时 DATABASE_URL。PostgreSQL 的三账号规则由设备行更新锁、三个唯一槽位和 CHECK 约束共同保证。
 
-3. 创建 Vercel 项目，框架选 Vite。构建、安装、路由和函数配置已写在 `vercel.json`。`npm run build:cloud` 生成 PostgreSQL Prisma Client、校验类型、构建前端，并将后端打包为 CommonJS；`api/index.ts` 是 Vercel 入口。
+3. 创建 Vercel 项目，框架选 Vite。构建、安装、路由和函数配置已写在 `vercel.json`。`npm run build:cloud` 生成 PostgreSQL Prisma Client、校验类型并构建前端。`api/index.ts` 是 Vercel 入口；后端与共享模块使用明确的 `.js` 导入路径，兼容 Node 原生 ESM 解析及 TypeScript 编译。
 4. 在 Production 设置以下服务端环境变量。不要使用 `VITE_` 前缀，不要提交私密 `.env`。
 
 | 变量 | 设置 |

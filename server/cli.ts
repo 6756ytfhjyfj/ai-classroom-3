@@ -1,8 +1,8 @@
 import "dotenv/config";
 import { mkdirSync, writeFileSync } from "node:fs";
-import { db, seed, audit } from "./db";
-import { usernameSchema, passwordSchema } from "../shared/protocol";
-import { hashPassword, token, digest } from "./security";
+import { db, seed, audit } from "./db.js";
+import { usernameSchema, passwordSchema } from "../shared/protocol.js";
+import { hashPassword, token, digest } from "./security.js";
 async function hiddenPassword() {
   if (!process.stdin.isTTY)
     throw new Error(

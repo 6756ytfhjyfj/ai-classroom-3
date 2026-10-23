@@ -15,10 +15,10 @@ import {
   labSchema,
   type LabState,
   type SubjectId,
-} from "./protocol";
-import { solveCircuit, quadratic, atomInfo, balanceEquation } from "./solvers";
-import { compileExpression, numericRoots } from "./expressions";
-import { geometry, projectile, lens, dnaComplement } from "./science";
+} from "./protocol.js";
+import { solveCircuit, quadratic, atomInfo, balanceEquation } from "./solvers.js";
+import { compileExpression, numericRoots } from "./expressions.js";
+import { geometry, projectile, lens, dnaComplement } from "./science.js";
 export interface TeachingSkill {
   id: string;
   name: string;

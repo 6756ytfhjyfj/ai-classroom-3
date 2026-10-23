@@ -9,8 +9,8 @@ import {
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { createDeepSeek } from "@ai-sdk/deepseek";
 import type { AIProviderConfig } from "@prisma/client";
-import { db } from "./db";
-import { AppError, decrypt, validateProviderUrl } from "./security";
+import { db } from "./db.js";
+import { AppError, decrypt, validateProviderUrl } from "./security.js";
 
 export interface GenerationInput {
   system: string;

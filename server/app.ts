@@ -7,11 +7,11 @@ import { resolve } from "node:path";
 import { existsSync } from "node:fs";
 import { ZodError } from "zod";
 import { Prisma } from "@prisma/client";
-import { AppError } from "./security";
-import { authRoutes } from "./auth";
-import { classroomRoutes } from "./classrooms";
-import { adminRoutes } from "./admin";
-import { seed } from "./db";
+import { AppError } from "./security.js";
+import { authRoutes } from "./auth.js";
+import { classroomRoutes } from "./classrooms.js";
+import { adminRoutes } from "./admin.js";
+import { seed } from "./db.js";
 export async function createApp(
   options: { staticDir?: string; logging?: boolean; serveStatic?: boolean } = {},
 ) {
@@ -120,7 +120,7 @@ export async function createApp(
     speechConfig:
       (
         await (
-          await import("./db")
+          await import("./db.js")
         ).db.speechProviderConfig.findUnique({ where: { id: "system" } })
       )?.data ?? null,
   }));

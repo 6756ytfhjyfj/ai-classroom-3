@@ -34,7 +34,7 @@ Windows 下载：[GitHub Releases](https://github.com/6756ytfhjyfj/ai-classroom-
 
 ## Windows 安装版
 
-下载 `AI-Classroom-3.0.0-Setup.exe`，对照 `SHA256SUMS.txt` 校验后安装。安装包目前未做商业代码签名。单机版的数据和账号独立保存在本机，与公网版不会自动同步。
+下载 `AI-Classroom-3.0.0-Setup.exe`，对照仓库中的 [SHA256SUMS.txt](../SHA256SUMS.txt) 校验后安装。安装包目前未做商业代码签名。单机版的数据和账号独立保存在本机，与公网版不会自动同步。
 
 单机版首次配置管理员：退出应用后，在 PowerShell 使用实际安装路径启动：
 

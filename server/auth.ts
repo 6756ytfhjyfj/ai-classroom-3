@@ -1,12 +1,12 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { z } from "zod";
-import { db, serialized, audit } from "./db";
+import { db, serialized, audit } from "./db.js";
 import {
   credentials,
   usernameSchema,
   passwordSchema,
   type PublicUser,
-} from "../shared/protocol";
+} from "../shared/protocol.js";
 import {
   AppError,
   token,
@@ -14,7 +14,7 @@ import {
   hashPassword,
   verifyPassword,
   equalsDigest,
-} from "./security";
+} from "./security.js";
 declare module "fastify" {
   interface FastifyRequest {
     account: PublicUser;
