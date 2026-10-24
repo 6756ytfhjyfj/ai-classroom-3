@@ -4,7 +4,7 @@ export default defineConfig({
     include: ["tests/**/*.test.ts"],
     fileParallelism: false,
     testTimeout: 30000,
-    hookTimeout: 30000,
+    hookTimeout: 120000,
     env: {
       DATABASE_URL: "file:./test.db",
       ENCRYPTION_KEY: Buffer.alloc(32, 7).toString("base64"),

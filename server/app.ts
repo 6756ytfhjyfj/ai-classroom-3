@@ -12,6 +12,8 @@ import { authRoutes } from "./auth.js";
 import { classroomRoutes } from "./classrooms.js";
 import { adminRoutes } from "./admin.js";
 import { seed } from "./db.js";
+import { libraryRoutes, questionAdminRoutes } from "./library.js";
+import { questionCount } from "../shared/questions.js";
 export async function createApp(
   options: { staticDir?: string; logging?: boolean; serveStatic?: boolean } = {},
 ) {
@@ -53,6 +55,7 @@ export async function createApp(
       const origin = req.headers.origin;
       const allowed = [
         process.env.APP_ORIGIN ?? "http://127.0.0.1:4310",
+        ...(process.env.ADMIN_ORIGIN ? [process.env.ADMIN_ORIGIN] : []),
         ...(process.env.VERCEL === "1"
           ? [process.env.VERCEL_URL, process.env.VERCEL_PROJECT_PRODUCTION_URL]
               .filter((host): host is string => !!host)
@@ -104,7 +107,8 @@ export async function createApp(
   });
   app.get("/api/health", () => ({
     ok: true,
-    version: "3.0.0",
+    version: "3.1.0",
+    product: "ONclasstime",
     database: process.env.DATABASE_PROVIDER ?? "sqlite",
     deployment: process.env.CLASSROOM_SERVER_URL ? "central" : "local",
     physicalDeviceGuarantee: false,
@@ -113,6 +117,9 @@ export async function createApp(
   await app.register(authRoutes);
   await app.register(classroomRoutes);
   await app.register(adminRoutes);
+  await app.register(libraryRoutes);
+  await app.register(questionAdminRoutes);
+  app.get("/api/public/info",async()=>({product:"ONclasstime",version:"3.1.0",questions:questionCount+await (await import("./db.js")).db.questionRecord.count({where:{enabled:true}}),questionSource:"原创可计算变式与基础概念题，非历年真题",downloadUrl:process.env.INSTALLER_DOWNLOAD_URL??"",sha256:process.env.INSTALLER_SHA256??"",size:Number(process.env.INSTALLER_SIZE??0),releaseNotes:"独立 Windows 桌面课堂 · 全屏手写 · 题库与错题 · 学习笔记"}));
   app.get("/api/capabilities", async () => ({
     stt: "system",
     tts: "system",

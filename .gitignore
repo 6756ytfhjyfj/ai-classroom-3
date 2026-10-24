@@ -16,3 +16,7 @@ playwright-report/
 
 .vercel
 .env*
+
+desktop-app/
+admin-site/dist/
+installer/generated/

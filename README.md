@@ -1,135 +1,48 @@
-# AI Classroom 3.0 · Windows 工程版
+# ONclasstime 3.1
 
-**[网页版](https://ai-classroom-3-sand.vercel.app) · [Windows 下载](https://github.com/6756ytfhjyfj/ai-classroom-3/releases/tag/v3.0.0) · [简易使用指南](docs/QUICKSTART.zh-CN.md) · [公网部署说明](docs/CLOUD-DEPLOYMENT.md)**
+[下载网站](https://onclasstime.vercel.app) · [独立管理站](https://onclasstime-admin.vercel.app) · [Windows 发布](https://github.com/6756ytfhjyfj/ai-classroom-3/releases) · [使用指南](docs/QUICKSTART.zh-CN.md)
 
-这是可运行的 Electron 桌面应用与独立 Fastify 服务端，使用真实数据库、Canvas 笔迹和可计算实验。模型尚未配置时会明确提示，不输出模拟的 AI 回答。源码、数据库迁移、自动化测试和打包脚本随项目提供。
+面向 Windows 10/11 x64 的学习客户端。用户名与密码登录，支持全屏笔迹、六学科课堂、实时教学实验、练习题库、错题图片和 Markdown 笔记。品牌素材来自项目所有者，底部标识为 `Power By ONtimeclass`。
 
-## 直接使用 Windows 安装包
+3.1 将管理网站与学生程序分别构建；公开主页提供 Windows 安装包。所有用户认证与学习数据在可信后端处理，学生安装包不包含管理页面、数据库凭证或 AI 密钥。以前的设备绑定与三账号限制不再应用。旧绑定表仅为保留历史关系而留在迁移中。
 
-运行同级交付的 `AI-Classroom-3.0.0-Setup.exe`，按向导安装。首次启动可注册用户名与密码；注册后请保存一次性显示的账号恢复码。单机版在自己的应用数据目录保存 SQLite 数据库、加密密钥和设备凭证，不需要自行安装 Node.js。
+## 使用
 
-安装包未配置商业代码签名证书。正式学校分发应由部署方签名；可对照交付的 SHA256 文件核验包内容。
+下载 `ONclasstime-3.1.0-Setup.exe`，打开安装向导，选择位置与快捷方式，安装完成后启动。注册用户名与至少 10 位密码并保存账号恢复码。
 
-首次配置 AI：退出应用，在 PowerShell 中使用安装后实际路径运行：
+- 练习题库：157,011 道实际可作答的原创计算变式与基础题，支持学科、知识点、难度筛选。数理化以计算变式为主，语文、生物为少量基础概念，英语为基础语法；不会将这些题标作历年真题。管理员可导入有合法来源的题库。
+- 我的错题：答错自动归档，也可上传 PNG/JPEG/WebP。单张经本机压缩后不超过 2 MB，账号图片总额 20 MB。上传前确认，图片不会自动发送给 AI。支持订正、复习安排、标记掌握和摘录到笔记。
+- 笔记本：分本管理、自动保存、置顶、搜索、Markdown/公式预览、导出；断网或冲突保留本机草稿。账号间隔离，并发更新使用版本检查。
+- AI 课堂：由管理员配置 DeepSeek/Gemini 的实际模型和密钥。未配置时明确提示，题库和笔记仍可用。AQ 前缀不会被本地校验拒绝；真实认证结果以官方服务响应为准。
 
-```powershell
-& 'C:\实际安装目录\AI Classroom.exe' --initialize-admin
-```
+账号、资料同步和 AI 需要网络。客户端在本机保留未提交草稿；卸载保留本机用户资料和云端账号资料。安装包目前没有商业代码签名。
 
-这是本机所有者显式开启的随机、一次性初始化通道。创建独立管理员用户名与密码后进入后台；已存在管理员时不能重复初始化。以后可关闭应用再使用 `--admin` 参数启动，或访问应用同一来源的 `/admin` 路径登录，学生界面没有入口。源码启动可运行 `npm run admin:create -- 管理员用户名`。
+## 开发与验证
 
-后台选择 DeepSeek 或 Gemini，填写真实密钥、可用模型 ID、Base URL，保存并点击“真实连接测试”。Gemini 使用 `x-goog-api-key`，接受 AQ 等格式，不检查 AIza 前缀。系统不会预设“最新模型”名称。图片识别需为实际支持图片的模型开启图片能力，并映射到对应学科或默认全部。Gemini 默认 API 地址为 `https://generativelanguage.googleapis.com/v1beta`；DeepSeek 默认 `https://api.deepseek.com`。
-
-## 从源码运行
-
-环境：Windows 10/11 x64、Node.js 24 LTS、npm；联网安装 npm 依赖及首次下载 Electron。无需 Rust、.NET SDK 或 Docker。
+需要 Windows、Node.js 22.13+（建议 24）、npm。数据库与云端凭据不随源码发布。
 
 ```powershell
 npm ci
 npm run setup
-npm run build
-npm run desktop
-```
-
-开发网页与服务端：
-
-```powershell
 npm run dev
-# 打开 http://127.0.0.1:5173
 ```
 
-运行生产网页服务：
-
-```powershell
-npm run build
-npm start
-# 打开 http://127.0.0.1:4310
-```
-
-源码网页模式和桌面单机模式使用不同的数据目录。网页模式数据库由 `.env` 的 DATABASE_URL 指定；桌面模式在 Electron 的 userData 中独立保存，并通过 Windows DPAPI 保护密钥。不要将开发数据库直接复制进安装包。
-
-## 集中部署：可信的三账号设备限制
-
-单机 SQLite 是演示与个人使用模式，本机所有者可修改本地程序或数据库，不能作为学校跨设备注册限制的可信边界。
-
-集中服务端：
-
-1. 准备 PostgreSQL，创建专用最小权限数据库账号。
-2. 复制 `.env.example` 到 `.env`，设置 DATABASE_URL、DATABASE_PROVIDER=postgresql、DEVICE_ENROLLMENT_MODE=admin、独立32字节base64 ENCRYPTION_KEY、HTTPS APP_ORIGIN、COOKIE_SECURE=true。
-3. 执行以下命令（PowerShell）。
-
-```powershell
-npm ci
-npm run db:postgres
-npx prisma generate --schema prisma/postgres/schema.prisma
-npx prisma migrate deploy --schema prisma/postgres/schema.prisma
-npm run admin:create -- 管理员用户名
-npm run build
-npm start
-```
-
-管理员初始设备凭证写入服务端 `data/admin-device-credential.json`，在初次登录页导入，之后使用管理员账号登录 `/admin`。该文件需要保密，不纳入源码或备份公开下载。
-
-在管理员“设备与注册名额”中审核并签发新设备凭证，由学生在首次登录页导入。丢失旧凭证时审核重绑定旧设备，避免重复签发新身份。设备名额事务使用设备行锁与三个数据库唯一槽位，账号删除与冻结不自动释放名额。管理员重置需要设备ID和理由，保留审计。
-
-桌面客户端连接集中服务：
-
-```powershell
-$env:CLASSROOM_SERVER_URL='https://你的学校服务域名'
-& 'C:\实际安装目录\AI Classroom.exe'
-```
-
-部署方需配置 HTTPS 反向代理、日志与备份。默认服务仅绑定127.0.0.1；若容器或代理需要，显式配置 HOST。代码默认不信任转发IP头，启用代理信任前应限定可信代理，勿直接接受任意 X-Forwarded-For。
-
-设备恢复凭证是隐私友好的随机身份，不收集未经授权的硬件序列号。保留凭证的重装能恢复名额；清空凭证后无法证明是同一物理设备，集中模式必须审核恢复。没有“绝对不可绕过”的硬件级承诺。
-
-## 核心操作
-
-- 数学：安全表达式函数绘图、a/b/c滑块、基准图像对比、数值零点、切线、几何拖点及面积周长。支持 sin/cos/tan/sqrt/abs/exp/ln/log，乘法必须写 `*`。通用函数零点搜索范围[-10,10]，可能遗漏偶重根；二次函数用解析结果。
-- 物理：拖拽和接线的直流MNA电路、电阻/电池/开关/灯泡/仪表，短路和浮空反馈；另有抛体运动、共点力合成、理想凸薄透镜。所有简化条件在界面说明。
-- 化学：原子/离子电子层、可旋转三维球棍投影模型、元素守恒配平（支持括号，不支持复杂离子氧化还原配平）。
-- 生物：细胞结构与DNA互补链；语文/英语：可编辑阅读、学习笔记与系统朗读，配合AI工具写入教学分析。
-- AI 双模式：自由问答或老师带学；教学计划与进度通过 TeachingPlan 工具真实持久化。每轮传入当前实验和最近对话，工具经过Schema、学科、启用状态与版本检查。
-- 手写：点击“手写”即覆盖整个应用窗口，无需再次点画布；压感、合并轨迹、笔侧橡皮事件、鼠标回退、缩放平移、撤销重做、可撤销清空、导出笔迹。
-- 云端识别：用户授权后发送PNG至配置的视觉模型，停笔可生成候选；候选可编辑，不替换原稿，不自动发送或清空。无视觉模型时仍可书写、保存和手动编辑文字。
-- 联合提问：白板内语音补充或课堂添加图片；确认后一起提交。普通文字提问会附带当前实验上下文。
-- 语音：桌面使用Windows本地 System.Speech 语言包；系统TTS支持朗读、暂停、继续、停止和语速音量。网页系统STT可能外发，必须额外授权。默认手动确认文字，不保存原始录音。
-- 打断：按钮、Esc、手写或语音入口立即取消当前请求与朗读，已生成内容保留。未实现常开麦克风自动声学打断，可靠回退是按钮与快捷键。
-
-快捷键：Ctrl+Enter发送；Ctrl+Shift+H手写；Ctrl+Shift+M语音；白板Ctrl+Z/Ctrl+Y撤销重做；Esc退出输入；非输入框中Space暂停/继续朗读。个人设置可修改手写与语音快捷键。
-
-请在个人设置中导出设备恢复凭证，并备份服务器数据库与加密主密钥。丢失加密主密钥后无法还原已保存的API密钥。
-
-## 测试与打包
+本地开发使用 SQLite，`http://127.0.0.1:5173` 为学生页面，Fastify 在 4310。另开终端以 `$env:ONCLASSTIME_SURFACE='admin'; npm run dev:web` 启动独立管理界面（先停止占用 5173 的学生开发页）。`npm run admin:create -- <用户名>` 在本地安全初始化管理员。
 
 ```powershell
 npm run typecheck
 npm test
-# 启动 npm start 后，在另一个终端：
-npm run test:e2e
-node scripts/desktop-smoke.mjs
-# 首次管理员引导，使用独立测试profile：
-node scripts/desktop-smoke.mjs --setup
+node scripts/verify-onclasstime.mjs
+npm run build
 npm run package:win
 ```
 
-浏览器测试使用已安装的 Microsoft Edge。测试会创建专用测试账号；单元/集成测试使用独立 `prisma/test.db`，不会重置正式数据库。源码测试中的 AQ 示例仅验证格式、加密与脱敏，不能替代有效密钥的真实联网验收。
+`verify-onclasstime` 使用系统 Edge 和真实 API/数据库测试注册、答题、错题上传、笔记保存恢复、公式预览。测试会创建专用验收账号；请使用测试数据库。`ONCLASSTIME_TEST_EXE` 可指向安装后的程序，`ONCLASSTIME_TEST_PROFILE` 指定独立本机配置目录。真实数位板、麦克风与云 AI 密钥仍需人工验收。
 
-标准NSIS安装包输出到 `release/`。磁盘紧张时可把临时目录与打包输出放在其他磁盘：
+安装包由 Electron 目录包和自定义 WPF 向导组成；构建使用 Windows 自带 .NET Framework C# 编译器。向导验证嵌入载荷 SHA-256、真实解压进度、可取消安装、目录归属验证和升级回滚。可通过 Windows“已安装的应用”卸载。生产分发建议配置代码签名。
 
-```powershell
-$env:TEMP='D:\你的构建临时目录'
-$env:TMP=$env:TEMP
-$env:ELECTRON_BUILDER_CACHE='D:\你的构建缓存目录'
-$env:ELECTRON_CACHE='D:\你的Electron缓存目录'
-npm run build
-npx electron-builder --win nsis --x64 --config.directories.output='D:\你的构建输出目录'
-```
+## 工程结构
 
-准确的本次验证结果、待验证项目与限制见 [验收记录](docs/VALIDATION.md)；设计见 [架构](docs/ARCHITECTURE.md)、[安全说明](docs/SECURITY.md)。
+`src/` 学生界面、下载页与独立管理入口；`electron/` 沙箱桌面窗口、本机界面和 HTTPS API 代理；`server/` Fastify 身份认证、持久化、模型代理及管理权限；`shared/` 协议、题库与实验计算；`prisma/` SQLite/PostgreSQL schema 和递增迁移；`installer/` WPF 安装卸载向导；`admin-site/` 独立 Vercel 项目配置。
 
-## 本版边界
-
-本版实现上述可运行路径，不应等同于所有教育学科能力均达到正式商用品质。未实现独立离线Windows Ink文字OCR、音素级发音评分、云STT/TTS多厂商凭据接入、常开麦克风自动打断、完整人体系统、生物过程库、自动手绘电路拓扑重建及独立思维导图编辑器。函数参数可连续拖动，尚无独立的AI参数动画编排器。
-
-真实DeepSeek/Gemini AQ生成、视觉识别和真实AI连续教学需要有效服务密钥、网络与模型权限；本次环境未提供这些密钥。真实数位板压感/DPI/多显示器、麦克风准确率与用户安装向导应按人工测试矩阵签收。不得用本地计算器或协议测试替代这些正式验收。
+`ONCLASSTIME_SURFACE` 决定构建入口（desktop/download/admin）。`npm run build:cloud` 构建下载页和云后端所需 Prisma 客户端；`npm run build:admin` 仅构建管理站。管理站 `/api` 代理到主服务，使用本域 HttpOnly Cookie，后台每个接口验证管理员角色。详见[部署说明](docs/CLOUD-DEPLOYMENT.md)。

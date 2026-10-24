@@ -6,6 +6,7 @@
     "moduleResolution": "Bundler",
     "jsx": "react-jsx",
     "strict": true,
+    "paths":{"@product-entry":["./src/App.tsx"]},
     "noEmit": true,
     "skipLibCheck": true,
     "esModuleInterop": true,

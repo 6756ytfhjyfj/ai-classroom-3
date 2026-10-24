@@ -9,7 +9,7 @@ export function AdminSetup() {
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false);
   useEffect(() => {
-    history.replaceState({}, "", "/admin/setup");
+    history.replaceState({}, "", "/setup");
   }, []);
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -19,14 +19,11 @@ export function AdminSetup() {
     }
     setBusy(true);
     try {
-      const r = await api<{ secret: string }>("/setup/admin", {
+      await api<{ user: unknown }>("/setup/admin", {
         method: "POST",
         body: json({ username, password, bootstrapToken: token }),
       });
-      const proof = { installationId: crypto.randomUUID(), secret: r.secret };
-      if (window.desktop) await window.desktop.deviceWrite(proof);
-      else localStorage.setItem("classroom-device", json(proof));
-      location.href = "/admin";
+      location.href = "/";
     } catch (e) {
       setError(errorText(e));
     } finally {
@@ -82,7 +79,7 @@ export function AdminSetup() {
         </form>
         {!token && (
           <p className="warning-text">
-            网页版请使用部署所有者的一次性初始化链接；桌面版请关闭软件后使用 --initialize-admin 参数启动。
+            请使用部署所有者保管的一次性初始化链接。管理功能仅在独立管理网站提供。
           </p>
         )}
       </div>

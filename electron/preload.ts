@@ -1,8 +1,5 @@
 import { contextBridge, ipcRenderer } from "electron";
 contextBridge.exposeInMainWorld("desktop", {
-  deviceRead: () => ipcRenderer.invoke("device:read"),
-  deviceWrite: (data: { installationId: string; secret: string }) =>
-    ipcRenderer.invoke("device:write", data),
   fullscreen: (enabled: boolean) =>
     ipcRenderer.invoke("window:fullscreen", enabled),
   speechStart: (language: string) =>

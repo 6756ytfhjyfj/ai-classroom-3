@@ -21,6 +21,92 @@ model User {
   sessions AuthSession[]
   classrooms Classroom[]
   recoveryRequests RecoveryRequest[]
+  questionAttempts QuestionAttempt[]
+  wrongProblems WrongProblem[]
+  notebooks Notebook[]
+  notes Note[]
+}
+
+model QuestionRecord {
+  id String @id
+  subjectId String
+  topic String
+  difficulty Int
+  kind String
+  stem String
+  options String @default("[]")
+  answer String
+  explanation String
+  source String
+  enabled Boolean @default(true)
+  createdAt DateTime @default(now())
+  @@index([subjectId, topic, difficulty])
+}
+
+model QuestionAttempt {
+  id String @id @default(uuid())
+  userId String
+  questionId String
+  answer String
+  correct Boolean
+  snapshot String
+  createdAt DateTime @default(now())
+  user User @relation(fields:[userId], references:[id], onDelete:Cascade)
+  @@index([userId, createdAt])
+  @@index([userId, questionId])
+}
+
+model WrongProblem {
+  id String @id @default(uuid())
+  userId String
+  subjectId String
+  title String
+  prompt String @default("")
+  answer String @default("")
+  correctAnswer String @default("")
+  explanation String @default("")
+  note String @default("")
+  questionId String?
+  imageData String?
+  imageMime String?
+  imageBytes Int @default(0)
+  status String @default("REVIEW")
+  reviewAt DateTime @default(now())
+  revision Int @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user User @relation(fields:[userId], references:[id], onDelete:Cascade)
+  @@unique([userId, questionId])
+  @@index([userId, subjectId, status])
+  @@index([userId, reviewAt])
+}
+
+model Notebook {
+  id String @id @default(uuid())
+  userId String
+  name String
+  color String @default("#6578e6")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user User @relation(fields:[userId], references:[id], onDelete:Cascade)
+  notes Note[]
+  @@index([userId, updatedAt])
+}
+
+model Note {
+  id String @id @default(uuid())
+  userId String
+  notebookId String
+  title String @default("未命名笔记")
+  content String @default("")
+  subjectId String @default("math")
+  pinned Boolean @default(false)
+  revision Int @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user User @relation(fields:[userId], references:[id], onDelete:Cascade)
+  notebook Notebook @relation(fields:[notebookId], references:[id], onDelete:Cascade)
+  @@index([userId, notebookId, updatedAt])
 }
 model Device {
   id String @id @default(uuid())
@@ -55,12 +141,12 @@ model DeviceAccountBinding {
 model AuthSession {
   id String @id
   userId String
-  deviceId String
+  deviceId String?
   expiresAt DateTime
   revokedAt DateTime?
   createdAt DateTime @default(now())
   user User @relation(fields:[userId], references:[id])
-  device Device @relation(fields:[deviceId], references:[id])
+  device Device? @relation(fields:[deviceId], references:[id])
   @@index([userId, expiresAt])
 }
 model Subject {

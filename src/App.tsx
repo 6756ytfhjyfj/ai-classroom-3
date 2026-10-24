@@ -18,11 +18,13 @@ import {
   PenLine,
   AudioLines,
   ArrowRight,
+  Library,
+  BookMarked,
+  NotebookPen,
 } from "lucide-react";
+import { LibraryWorkspace, type LibrarySection, type StudyInput } from "./components/LibraryWorkspace";
 import { Auth } from "./components/Auth";
 import { Classroom } from "./components/Classroom";
-import { Admin } from "./components/Admin";
-import { AdminSetup } from "./components/AdminSetup";
 import { Settings } from "./components/Settings";
 import { Brand, Modal, ErrorNotice, errorText, Spinner } from "./components/ui";
 import { api, json } from "./services/api";
@@ -45,9 +47,9 @@ export default function App() {
     [collapsed, setCollapsed] = useState(false),
     [error, setError] = useState(""),
     [creating, setCreating] = useState(false);
+  const [workspace,setWorkspace]=useState<LibrarySection|null>(null),[studySeed,setStudySeed]=useState<(StudyInput&{id:string})|null>(null);
   const theme = useClassroomUI((s) => s.theme),
-    setTheme = useClassroomUI((s) => s.setTheme),
-    admin = location.pathname.startsWith("/admin");
+    setTheme = useClassroomUI((s) => s.setTheme);
   const refresh = () =>
     api<{ classrooms: ClassroomSummary[] }>("/classrooms")
       .then((r) => setClassrooms(r.classrooms))
@@ -85,6 +87,8 @@ export default function App() {
     setUser(null);
     setActive(null);
     setClassrooms([]);
+    setWorkspace(null);
+    setStudySeed(null);
   }
   async function create(subjectId: SubjectId) {
     if (creating) return;
@@ -97,6 +101,7 @@ export default function App() {
         body: json({ subjectId, title: s.name + " · 新的探索", mode: "qa" }),
       });
       await refresh();
+      setWorkspace(null);
       setActive(c.id);
     } catch (e) {
       setError(errorText(e));
@@ -105,11 +110,16 @@ export default function App() {
     }
   }
   async function subject(subjectId: SubjectId) {
+    setWorkspace(null);
     const prior = classrooms.find((c) => c.subjectId === subjectId);
     if (prior) setActive(prior.id);
     else await create(subjectId);
   }
-  if (location.pathname === "/admin/setup") return <AdminSetup />;
+  async function study(q:StudyInput){
+    const c=await api<ClassroomSummary>("/classrooms",{method:"POST",body:json({subjectId:q.subjectId,title:subjectName(q.subjectId)+" · 专题讲解",mode:"qa"})});
+    setStudySeed({...q,id:c.id});await refresh();setWorkspace(null);setActive(c.id);
+  }
+  function subjectName(id:SubjectId){return subjects.find(s=>s.id===id)?.name??id}
   if (loading)
     return (
       <div className="app-loading">
@@ -117,8 +127,7 @@ export default function App() {
         <Spinner />
       </div>
     );
-  if (!user) return <Auth onLogin={setUser} admin={admin} />;
-  if (admin) return <Admin user={user} onLogout={() => void logout()} />;
+  if (!user) return <Auth onLogin={setUser} />;
   const selected = classrooms.find((c) => c.id === active)?.subjectId;
   return (
     <div className={"app-shell " + (collapsed ? "sidebar-collapsed" : "")}>
@@ -135,12 +144,13 @@ export default function App() {
         </div>
         <nav>
           <button
-            className={"nav-item " + (!active ? "active" : "")}
-            onClick={() => setActive(null)}
+            className={"nav-item " + (!active&&!workspace ? "active" : "")}
+            onClick={() => {setActive(null);setWorkspace(null)}}
           >
             <Home size={18} />
             <span>学习空间</span>
           </button>
+          {([{id:"questions",name:"练习题库",Icon:Library},{id:"wrongs",name:"我的错题",Icon:BookMarked},{id:"notebooks",name:"笔记本",Icon:NotebookPen}] as const).map(({id,name,Icon})=><button key={id} className={"nav-item "+(workspace===id?"active":"")} onClick={()=>{setActive(null);setWorkspace(id)}}><Icon size={18}/><span>{name}</span></button>)}
           <button className="nav-item" onClick={() => setHistory(true)}>
             <History size={18} />
             <span>学习记录</span>
@@ -216,16 +226,17 @@ export default function App() {
             </button>
           </div>
           <span className="sidebar-version">
-            AI CLASSROOM <b>3.0</b>
+            ONCLASSTIME <b>3.1</b>
           </span>
         </div>
       </aside>
       <div className="main-area">
-        {active ? (
+        {workspace ? <LibraryWorkspace key={workspace} section={workspace} user={user} onStudy={study}/> : active ? (
           <Classroom
             key={active}
             id={active}
             user={user}
+            initialInput={studySeed?.id===active?studySeed:undefined}
             onUpdated={() => void refresh()}
           />
         ) : (
@@ -393,7 +404,7 @@ export default function App() {
             <footer className="home-footer">
               <span className="status-dot" />
               你的每一次探索，都值得被记住。
-              <span>AI Classroom 3.0 · Windows</span>
+              <span>ONclasstime 3.0 · Windows</span>
             </footer>
           </motion.main>
         )}

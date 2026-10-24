@@ -42,18 +42,20 @@ export function Classroom({
   id,
   user,
   onUpdated,
+  initialInput,
 }: {
   id: string;
   user: PublicUser;
   onUpdated: () => void;
+  initialInput?: {text:string;image?:string};
 }) {
   const [data, setData] = useState<ClassroomData | null>(null),
     [lab, setLab] = useState<LabState | null>(null),
     [messages, setMessages] = useState<ChatMessage[]>([]),
     [draft, setDraft] = useState(
-      () => localStorage.getItem(`question:${user.id}:${id}`) ?? "",
+      () => initialInput?.text ?? localStorage.getItem(`question:${user.id}:${id}`) ?? "",
     ),
-    [attachment, setAttachment] = useState<string | undefined>(),
+    [attachment, setAttachment] = useState<string | undefined>(initialInput?.image),
     [busy, setBusy] = useState(false),
     [ink, setInk] = useState(false),
     [voice, setVoice] = useState(false),

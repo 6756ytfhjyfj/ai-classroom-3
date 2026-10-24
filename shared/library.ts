@@ -1,0 +1,10 @@
+import { z } from "zod";
+import { subjectId } from "./protocol.js";
+export const questionImportSchema=z.object({
+ id:z.string().regex(/^q:[a-zA-Z0-9_-]{3,80}$/),subjectId,topic:z.string().min(1).max(60),difficulty:z.number().int().min(1).max(3),kind:z.enum(["number","roots","choice","text"]),stem:z.string().min(5).max(8000),options:z.array(z.string().max(1000)).max(8).default([]),answer:z.string().min(1).max(200),explanation:z.string().min(1).max(12000),source:z.string().min(1).max(300),
+}).superRefine((q,ctx)=>{if(q.kind==="choice"&&(q.options.length<2||!new RegExp(`^[A-${String.fromCharCode(64+q.options.length)}]$`).test(q.answer)))ctx.addIssue({code:"custom",message:"选择题必须有至少两个选项，答案必须对应选项字母"})});
+export const wrongCreateSchema=z.object({subjectId,title:z.string().min(1).max(120),prompt:z.string().max(10000).default(""),answer:z.string().max(2000).default(""),correctAnswer:z.string().max(2000).default(""),explanation:z.string().max(15000).default(""),note:z.string().max(30000).default(""),questionId:z.string().max(100).optional(),imageData:z.string().max(2_900_000).optional()}).refine(q=>q.prompt.trim()||q.imageData,{message:"请填写题目或上传图片"});
+export const wrongUpdateSchema=z.object({expectedVersion:z.number().int().nonnegative(),title:z.string().min(1).max(120).optional(),prompt:z.string().max(10000).optional(),answer:z.string().max(2000).optional(),correctAnswer:z.string().max(2000).optional(),explanation:z.string().max(15000).optional(),note:z.string().max(30000).optional(),status:z.enum(["REVIEW","MASTERED"]).optional(),reviewDays:z.number().int().min(1).max(90).optional()});
+export interface WrongItem {id:string;subjectId:string;title:string;prompt:string;answer:string;correctAnswer:string;explanation:string;note:string;questionId:string|null;imageMime:string|null;imageBytes:number;status:string;reviewAt:string;revision:number;updatedAt:string}
+export interface NotebookItem {id:string;name:string;color:string;updatedAt:string;_count:{notes:number}}
+export interface NoteItem {id:string;notebookId:string;title:string;content:string;subjectId:string;pinned:boolean;revision:number;updatedAt:string}

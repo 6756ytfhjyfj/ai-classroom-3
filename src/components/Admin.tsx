@@ -1,3 +1,4 @@
+import { QuestionAdmin } from "./QuestionAdmin";
 import { useEffect, useState } from "react";
 import {
   ArrowLeft,
@@ -6,7 +7,7 @@ import {
   Users,
   KeyRound,
   FlaskConical,
-  Monitor,
+  BookOpen,
   ScrollText,
   AudioLines,
   Check,
@@ -33,17 +34,6 @@ interface UserRow {
   role: string;
   status: string;
   bindings: { deviceId: string; slot: number | null }[];
-}
-interface DeviceRow {
-  id: string;
-  status: string;
-  bindings: {
-    id: string;
-    user: { displayName: string };
-    slot: number | null;
-    bindingStatus: string;
-  }[];
-  installations: { id: string }[];
 }
 interface RequestRow {
   id: string;
@@ -76,7 +66,6 @@ export function Admin({
     [busy, setBusy] = useState(false),
     [models, setModels] = useState<string[]>([]),
     [users, setUsers] = useState<UserRow[]>([]),
-    [devices, setDevices] = useState<DeviceRow[]>([]),
     [logs, setLogs] = useState<
       {
         id: string;
@@ -120,10 +109,9 @@ export function Admin({
     }
   }
   async function refresh() {
-    const [p, u, d, l, r, s, sp, st] = await Promise.all([
+    const [p, u, l, r, s, sp, st] = await Promise.all([
       api<{ providers: Config[] }>("/admin/providers"),
       api<{ users: UserRow[] }>("/admin/users"),
-      api<{ devices: DeviceRow[] }>("/admin/devices"),
       api<{ logs: typeof logs }>("/admin/audit"),
       api<{ requests: RequestRow[] }>("/admin/requests"),
       api<{ skills: typeof skills }>("/admin/skills"),
@@ -132,7 +120,6 @@ export function Admin({
     ]);
     setConfigs(p.providers);
     setUsers(u.users);
-    setDevices(d.devices);
     setLogs(l.logs);
     setRequests(r.requests);
     setSkills(s.skills);
@@ -164,7 +151,7 @@ export function Admin({
         <ShieldCheck size={40} />
         <h1>需要管理员权限</h1>
         <p>此账号没有访问管理控制台的权限。</p>
-        <a className="primary" href="/">
+        <a className="primary" href="https://ai-classroom-3-sand.vercel.app">
           返回学习空间
         </a>
       </main>
@@ -174,7 +161,7 @@ export function Admin({
     { id: "speech", title: "语音与识别", Icon: AudioLines },
     { id: "skills", title: "教学 Skill", Icon: FlaskConical },
     { id: "users", title: "用户管理", Icon: Users },
-    { id: "devices", title: "设备与注册名额", Icon: Monitor },
+    { id: "questions", title: "题库管理", Icon: BookOpen },
     { id: "requests", title: "恢复与删除审核", Icon: Settings2 },
     { id: "audit", title: "安全审计", Icon: ScrollText },
   ];
@@ -201,7 +188,7 @@ export function Admin({
         <div className="admin-nav-bottom">
           <a href="/">
             <ArrowLeft size={15} />
-            返回课堂
+            下载客户端
           </a>
           <button onClick={onLogout}>退出管理员</button>
         </div>
@@ -209,7 +196,7 @@ export function Admin({
       <section className="admin-content">
         <header>
           <div>
-            <span className="eyebrow">AI CLASSROOM / CONTROL CENTER</span>
+            <span className="eyebrow">ONCLASSTIME / CONTROL CENTER</span>
             <h1>{tabs.find((t) => t.id === tab)?.title}</h1>
           </div>
           <button className="secondary" onClick={() => void task(refresh)}>
@@ -220,7 +207,7 @@ export function Admin({
         <div className="admin-stats">
           {Object.entries({
             users: "账号",
-            devices: "设备",
+            questions: "题库",
             messages: "消息",
             executions: "工具执行",
           }).map(([key, label]) => (
@@ -541,7 +528,7 @@ export function Admin({
                 <tr>
                   <th>账号</th>
                   <th>角色 / 状态</th>
-                  <th>设备绑定</th>
+                  <th>登录方式</th>
                   <th>操作</th>
                 </tr>
               </thead>
@@ -556,8 +543,7 @@ export function Admin({
                       {u.role} · {u.status}
                     </td>
                     <td>
-                      {u.bindings.length} 个（占用{" "}
-                      {u.bindings.filter((b) => b.slot !== null).length}）
+                      用户名 / 密码
                     </td>
                     <td>
                       <button
@@ -607,91 +593,7 @@ export function Admin({
             </table>
           </div>
         )}
-        {tab === "devices" && (
-          <div className="admin-card">
-            <button
-              className="secondary"
-              onClick={() => {
-                const reason = prompt("填写新设备准入原因（至少10字）：");
-                if (!reason) return;
-                void task(async () => {
-                  const r = await api<{ secret: string; deviceId: string }>(
-                    "/admin/devices",
-                    { method: "POST", body: json({ reason }) },
-                  );
-                  download("AI-Classroom-设备准入凭证.json", json(r));
-                  await refresh();
-                  setNotice(
-                    "新设备凭证已导出；请通过安全渠道交给学生导入，不要重复签发替代重绑定。",
-                  );
-                });
-              }}
-            >
-              审核并签发新设备凭证
-            </button>
-            <p className="muted">
-              设备凭证是隐私友好的随机身份，不能证明物理硬件唯一性。重绑定会撤销该设备会话，重置名额会保留审计。
-            </p>
-            {devices.map((d) => (
-              <div className="device-admin-row" key={d.id}>
-                <b>设备 {d.id}</b>
-                <p>
-                  {d.bindings.filter((b) => b.slot !== null).length} / 3 名额 ·{" "}
-                  {d.installations.length} 安装实例
-                </p>
-                <div className="binding-chips">
-                  {d.bindings.map((b) => (
-                    <span key={b.id}>
-                      {b.user.displayName} · {b.slot ?? "已释放"}
-                    </span>
-                  ))}
-                </div>
-                <div className="modal-actions">
-                  <button
-                    className="secondary"
-                    onClick={() => {
-                      const reason = prompt(
-                        "审核后填写重绑定原因（至少10字）。此操作撤销旧凭证与会话。",
-                      );
-                      if (!reason) return;
-                      void task(async () => {
-                        const r = await api<{ secret: string; notice: string }>(
-                          "/admin/devices/" + d.id + "/rebind",
-                          { method: "POST", body: json({ reason }) },
-                        );
-                        setNotice(r.notice + "：" + r.secret);
-                        await refresh();
-                      });
-                    }}
-                  >
-                    审核并签发重绑定凭证
-                  </button>
-                  <button
-                    className="danger secondary"
-                    onClick={() => {
-                      const confirmDeviceId = prompt(
-                        "确认重置注册名额，请完整输入设备 ID：\n" + d.id,
-                      );
-                      if (!confirmDeviceId) return;
-                      const reason = prompt("填写重置原因（至少10字）：");
-                      if (!reason) return;
-                      void task(async () => {
-                        await api("/admin/devices/" + d.id + "/reset", {
-                          method: "POST",
-                          body: json({ confirmDeviceId, reason }),
-                        });
-                        await refresh();
-                        setNotice("设备名额已重置；历史绑定和审计已保留");
-                      });
-                    }}
-                  >
-                    重置设备名额
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+        {tab === "questions" && <QuestionAdmin/>}
         {tab === "requests" && (
           <div className="admin-card">
             {!requests.length ? (
@@ -726,7 +628,7 @@ export function Admin({
                             if (
                               action === "DELETE_DATA" &&
                               !confirm(
-                                "永久删除该用户全部课堂并匿名化账号，设备名额保留。确认已核验申请人？",
+                                "永久删除该用户全部课堂并匿名化账号，确认已核验申请人？",
                               )
                             )
                               return;

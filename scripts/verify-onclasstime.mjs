@@ -1,0 +1,50 @@
+import {chromium,_electron as electron,expect} from '@playwright/test';
+import {mkdirSync,writeFileSync} from 'node:fs';
+const desktop=process.env.ONCLASSTIME_TEST_EXE;
+const out=process.env.ONCLASSTIME_QA_DIR??'docs/qa/onclasstime';mkdirSync(out,{recursive:true});
+const launched=desktop?await electron.launch({executablePath:desktop,args:[],env:{...process.env,CLASSROOM_USER_DATA:process.env.ONCLASSTIME_TEST_PROFILE??'D:/CodexBuild/onclasstime-3.1/desktop-qa-profile'},timeout:60000}):await chromium.launch({channel:'msedge',headless:true});
+const page=desktop?await launched.firstWindow():await launched.newPage({viewport:{width:1500,height:1000},deviceScaleFactor:1});
+const report={checks:[],errors:[]};page.on('pageerror',e=>report.errors.push(e.message));
+const check=name=>report.checks.push(name);
+try{
+ if(!desktop)await page.goto(process.env.ONCLASSTIME_TEST_URL??'http://127.0.0.1:5173');
+ await page.getByRole('heading',{name:'欢迎回来',exact:true}).waitFor({timeout:60000});
+ await page.getByRole('button',{name:'注册账号',exact:true}).click();
+ const username='验收'+Date.now();
+ await page.getByLabel('用户名',{exact:true}).fill(username);
+ await page.getByLabel('密码',{exact:true}).fill('Verification-pass-2026');
+ await page.getByLabel('确认密码',{exact:true}).fill('Verification-pass-2026');
+ await page.getByRole('button',{name:'创建学习账号'}).click();
+ await page.getByRole('button',{name:'我已妥善保存'}).click({timeout:45000});check('用户名密码注册，无设备绑定');
+ await page.getByRole('button',{name:'练习题库',exact:true}).click();
+ await page.getByLabel('你的答案').fill('123456789');
+ await page.getByRole('button',{name:'核对答案'}).click();
+ await expect(page.getByText('先别急，这道题已进入错题本。')).toBeVisible();check('题库作答、真实判分、自动归档');
+ await page.getByRole('button',{name:'我的错题',exact:true}).click();
+ await expect(page.locator('.wrong-card')).toHaveCount(1);
+ await page.getByRole('button',{name:'上传错题',exact:true}).click();
+ await page.locator('input[type=file]').setInputFiles({name:'wrong.png',mimeType:'image/png',buffer:Buffer.from(await page.evaluate(()=>{const c=document.createElement('canvas');c.width=600;c.height=240;const g=c.getContext('2d');g.fillStyle='#fff';g.fillRect(0,0,600,240);g.fillStyle='#222';g.font='28px sans-serif';g.fillText('y = 2x + 1',50,100);return c.toDataURL('image/png').split(',')[1]}),'base64')});
+ const dialog=page.getByRole('dialog');
+ await dialog.getByLabel('标题',{exact:true}).fill('一张自己的错题');
+ await dialog.locator('input[type=checkbox]').check();
+ await dialog.getByRole('button',{name:/保存|上传/}).last().click();
+ await expect(page.locator('.wrong-card')).toHaveCount(2);check('错题图片上传、列表与账号存储');
+ await page.getByRole('button',{name:'笔记本',exact:true}).click();
+ await page.getByRole('button',{name:'新建笔记本',exact:true}).click();
+ await page.getByLabel('笔记本名称',{exact:true}).fill('验收笔记本');
+ await page.getByRole('button',{name:'创建笔记本',exact:true}).click();
+ await page.getByRole('button',{name:'新建笔记',exact:true}).click();
+ await page.getByLabel('笔记标题').fill('我的一次理解');
+ await page.getByLabel('笔记内容').fill('# 二次函数\n\n参数 a 控制开口方向与宽窄。\n\n$y=ax^2$');
+ await expect(page.getByText('已同步',{exact:true})).toBeVisible({timeout:30000});
+ await page.reload();await page.getByRole('button',{name:'笔记本',exact:true}).click();
+ await page.getByRole('button',{name:/我的一次理解/}).click();
+ 
+ expect(await page.getByLabel('笔记内容').inputValue()).toContain('参数 a');check('笔记自动保存、重启恢复');
+ await page.getByRole('button',{name:'预览',exact:true}).click();await expect(page.locator('.katex')).toBeVisible();check('Markdown 与公式预览');
+ await page.getByRole('button',{name:'练习题库',exact:true}).click();
+ await page.getByLabel('选择学科').selectOption('physics');await page.getByLabel('知识点').selectOption('ohm');
+ await page.getByLabel('你的答案').waitFor();await page.screenshot({path:out+'/desktop-preview.png'});check('物理筛选与真实客户端界面');
+ if(desktop){expect(await page.evaluate(()=>window.desktop.version())).toBe('3.1.0');await page.evaluate(()=>window.desktop.fullscreen(true));await page.evaluate(()=>window.desktop.fullscreen(false));check('安装后原生桥接与全屏')}
+ expect(report.errors).toEqual([]);
+}finally{writeFileSync(out+'/verification.json',JSON.stringify(report,null,2));if(report.errors.length||!report.checks.includes('物理筛选与真实客户端界面'))await page.screenshot({path:out+'/failure.png'}).catch(()=>{});await launched.close();console.log(JSON.stringify(report))}

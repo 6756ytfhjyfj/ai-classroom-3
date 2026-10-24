@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import type { PublicUser } from "../../shared/protocol";
 import { api, json } from "../services/api";
-import { bootstrapDevice, importDevice } from "../services/device";
 import { clearUserDrafts } from "../services/drafts";
 import { useClassroomUI } from "../state/classroom";
 import { Modal, ErrorNotice, errorText, download } from "./ui";
@@ -158,43 +157,6 @@ export function Settings({
               </label>
             ),
           )}
-          <h3>设备恢复</h3>
-          <p className="muted">
-            备份凭证可在重装后恢复设备关联与名额。凭证等同设备身份证明，请妥善保管。
-          </p>
-          <button
-            className="secondary full"
-            onClick={async () => {
-              try {
-                const d = await bootstrapDevice();
-                download(
-                  "AI-Classroom-设备恢复凭证.json",
-                  json({ secret: d.secret, deviceId: d.deviceId }),
-                );
-              } catch (e) {
-                setError(errorText(e));
-              }
-            }}
-          >
-            导出设备恢复凭证
-          </button>
-          <label>
-            导入管理员签发或备份的凭证
-            <input
-              type="file"
-              accept=".json"
-              onChange={async (e) => {
-                const f = e.target.files?.[0];
-                if (!f) return;
-                try {
-                  await importDevice(JSON.parse(await f.text()).secret);
-                  setNotice("设备凭证已更新，重新登录后生效");
-                } catch (err) {
-                  setError(errorText(err));
-                }
-              }}
-            />
-          </label>
           <h3>数据管理</h3>
           <button
             className="secondary full"
@@ -213,7 +175,7 @@ export function Settings({
             onClick={() => {
               if (
                 !window.confirm(
-                  "向管理员提交账号删除申请？审核后删除学习记录，设备名额按策略保留。",
+                  "向管理员提交账号删除申请？审核后删除学习记录，",
                 )
               )
                 return;
@@ -231,7 +193,7 @@ export function Settings({
         {sessions.map((s) => (
           <div key={s.id}>
             <span>
-              设备 {s.deviceId.slice(0, 8)} ·{" "}
+              会话 {s.id.slice(0, 8)} ·{" "}
               {new Date(s.expiresAt).toLocaleDateString()} 到期
             </span>
             <button

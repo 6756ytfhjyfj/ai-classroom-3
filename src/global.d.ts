@@ -2,14 +2,6 @@ export {};
 declare global {
   interface Window {
     desktop?: {
-      deviceRead: () => Promise<{
-        installationId: string;
-        secret: string;
-      } | null>;
-      deviceWrite: (d: {
-        installationId: string;
-        secret: string;
-      }) => Promise<boolean>;
       fullscreen: (v: boolean) => Promise<boolean>;
       speechStart: (lang: string) => Promise<boolean>;
       speechStop: () => Promise<boolean>;

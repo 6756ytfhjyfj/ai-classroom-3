@@ -19,7 +19,7 @@ declare module "fastify" {
   interface FastifyRequest {
     account: PublicUser;
     sessionId: string;
-    deviceId: string;
+    deviceId: string | null;
   }
 }
 export const publicUser = (u: {
@@ -64,23 +64,10 @@ export async function adminOnly(req: FastifyRequest) {
   if (req.account.role !== "ADMIN")
     throw new AppError(403, "ADMIN_REQUIRED", "需要管理员权限");
 }
-export async function getDevice(secret: string) {
-  const d = await db.device.findUnique({
-    where: { registrationIdentifier: digest(secret) },
-  });
-  if (!d || d.status !== "ACTIVE")
-    throw new AppError(
-      401,
-      "DEVICE_UNKNOWN",
-      "设备凭证失效，请导入设备恢复凭证或联系管理员",
-    );
-  return d;
-}
-const deviceProof = z.string().min(32).max(200);
 export async function session(
   reply: FastifyReply,
   userId: string,
-  deviceId: string,
+  deviceId: string | null,
   remember: boolean,
 ) {
   const t = token();
@@ -101,135 +88,19 @@ export async function session(
   });
 }
 export async function authRoutes(app: FastifyInstance) {
-  app.post(
-    "/api/device/bootstrap",
-    { config: { rateLimit: { max: 10, timeWindow: "1 hour" } } },
-    async (req) => {
-      const { installationId, secret } = z
-        .object({ installationId: z.uuid(), secret: deviceProof.optional() })
-        .parse(req.body);
-      if (
-        !secret &&
-        (process.env.DEVICE_ENROLLMENT_MODE ??
-          (process.env.DATABASE_PROVIDER === "postgresql"
-            ? "admin"
-            : "open-demo")) !== "open-demo"
-      )
-        throw new AppError(
-          409,
-          "DEVICE_APPROVAL_REQUIRED",
-          "此安装尚未绑定设备，请导入管理员签发的设备恢复凭证；丢失原凭证时申请重绑定。",
-        );
-      const proof = secret ?? token();
-      const device = secret
-        ? await getDevice(secret)
-        : await db.device.create({
-            data: { registrationIdentifier: digest(proof) },
-          });
-      const install = await db.installation.findUnique({
-        where: { id: installationId },
-      });
-      if (install && install.deviceId !== device.id)
-        throw new AppError(
-          409,
-          "INSTALLATION_BOUND",
-          "安装实例属于另一设备，恢复时请使用新的安装实例",
-        );
-      await db.installation.upsert({
-        where: { id: installationId },
-        create: { id: installationId, deviceId: device.id },
-        update: { lastSeenAt: new Date() },
-      });
-      const bindings = await db.deviceAccountBinding.findMany({
-        where: { deviceId: device.id, slot: { not: null } },
-        include: { user: true },
-      });
-      return {
-        secret: proof,
-        deviceId: device.id,
-        used: bindings.length,
-        limit: 3,
-        accounts: bindings
-          .filter((b) => b.user.status === "ACTIVE")
-          .map((b) => ({
-            username: b.user.displayName,
-            avatar: b.user.avatar,
-          })),
-      };
-    },
-  );
-  app.post(
-    "/api/auth/register",
-    { config: { rateLimit: { max: 12, timeWindow: "1 hour" } } },
-    async (req, reply) => {
-      const p = credentials.extend({ secret: deviceProof }).parse(req.body);
-      const d = await getDevice(p.secret),
-        passwordHash = await hashPassword(p.password),
-        recoveryCode = token();
-      const user = await serialized(() =>
-        db.$transaction(
-          async (tx) => {
-            await tx.device.update({
-              where: { id: d.id },
-              data: { lockVersion: { increment: 1 } },
-            });
-            const occupied = await tx.deviceAccountBinding.findMany({
-              where: { deviceId: d.id, slot: { not: null } },
-            });
-            const slot = [1, 2, 3].find(
-              (s) => !occupied.some((b) => b.slot === s),
-            );
-            if (!slot)
-              throw new AppError(
-                409,
-                "DEVICE_LIMIT",
-                "此设备已达到最多 3 个注册账号的限制。",
-              );
-            const u = await tx.user.create({
-              data: {
-                username: p.username.toLocaleLowerCase("en-US"),
-                displayName: p.username,
-                passwordHash,
-                recoveryHash: digest(recoveryCode),
-              },
-            });
-            await tx.deviceAccountBinding.create({
-              data: { deviceId: d.id, userId: u.id, slot },
-            });
-            return u;
-          },
-          { maxWait: 15000, timeout: 15000 },
-        ),
-      );
-      await session(reply, user.id, d.id, false);
-      return { user: publicUser(user), recoveryCode };
-    },
-  );
-  app.post(
-    "/api/auth/login",
-    { config: { rateLimit: { max: 10, timeWindow: "15 minutes" } } },
-    async (req, reply) => {
-      const p = credentials
-        .extend({ secret: deviceProof, remember: z.boolean().default(false) })
-        .parse(req.body);
-      const d = await getDevice(p.secret);
-      const u = await db.user.findUnique({
-        where: { username: p.username.toLocaleLowerCase("en-US") },
-      });
-      if (
-        !u ||
-        u.status !== "ACTIVE" ||
-        !(await verifyPassword(u.passwordHash, p.password))
-      )
-        throw new AppError(
-          401,
-          "INVALID_CREDENTIALS",
-          "用户名或密码错误，或账号已冻结",
-        );
-      await session(reply, u.id, d.id, p.remember);
-      return { user: publicUser(u) };
-    },
-  );
+  app.post('/api/device/bootstrap', async () => { throw new AppError(410,'CLIENT_UPDATE_REQUIRED','请安装新版 ONclasstime，使用用户名与密码登录，无需设备凭证。'); });
+  app.post('/api/auth/register', { config:{rateLimit:{max:12,timeWindow:'1 hour'}} }, async (req,reply)=>{
+    const p=credentials.parse(req.body), recoveryCode=token();
+    const user=await db.user.create({data:{username:p.username.toLocaleLowerCase('en-US'),displayName:p.username,passwordHash:await hashPassword(p.password),recoveryHash:digest(recoveryCode)}});
+    await session(reply,user.id,null,false);
+    return {user:publicUser(user),recoveryCode};
+  });
+  app.post('/api/auth/login', { config:{rateLimit:{max:10,timeWindow:'15 minutes'}} }, async (req,reply)=>{
+    const p=credentials.extend({remember:z.boolean().default(false)}).parse(req.body);
+    const u=await db.user.findUnique({where:{username:p.username.toLocaleLowerCase('en-US')}});
+    if(!u||u.status!=='ACTIVE'||!(await verifyPassword(u.passwordHash,p.password)))throw new AppError(401,'INVALID_CREDENTIALS','用户名或密码错误，或账号已冻结');
+    await session(reply,u.id,null,p.remember);return {user:publicUser(u)};
+  });
   app.get("/api/auth/me", { preHandler: authenticate }, (req) => ({
     user: req.account,
   }));
@@ -304,10 +175,9 @@ export async function authRoutes(app: FastifyInstance) {
         throw new AppError(
           403,
           "BOOTSTRAP_DISABLED",
-          "初始化通道未启用或凭证无效，请使用本机 --initialize-admin 启动",
+          "初始化通道未启用或凭证无效，请使用部署所有者提供的初始化链接",
         );
-      const secret = token(),
-        passwordHash = await hashPassword(p.password);
+      const passwordHash = await hashPassword(p.password);
       const result = await serialized(() =>
         db.$transaction(async (tx) => {
           if (await tx.user.count({ where: { role: "ADMIN" } }))
@@ -330,23 +200,21 @@ export async function authRoutes(app: FastifyInstance) {
               role: "ADMIN",
             },
           });
-          const d = await tx.device.create({
-            data: { registrationIdentifier: digest(secret) },
-          });
+
           await tx.administratorAuditLog.create({
             data: {
               actorId: u.id,
               action: "ADMIN_BOOTSTRAP",
               targetId: u.id,
-              detail: "local owner bootstrap",
+              detail: "deployment owner bootstrap",
             },
           });
-          return { u, d };
+          return { u };
         }),
       );
       delete process.env.CLASSROOM_BOOTSTRAP_TOKEN;
-      await session(reply, result.u.id, result.d.id, false);
-      return { user: publicUser(result.u), secret };
+      await session(reply, result.u.id, null, false);
+      return { user: publicUser(result.u) };
     },
   );
   app.patch("/api/account", { preHandler: authenticate }, async (req) => {
@@ -421,7 +289,7 @@ export async function authRoutes(app: FastifyInstance) {
         data: {
           userId: req.account.id,
           type: "DELETE_ACCOUNT",
-          detail: "用户申请删除账号和学习数据，名额按保留策略处理",
+          detail: "用户申请删除账号和学习数据",
         },
       });
       await audit(req.account.id, "REQUEST_ACCOUNT_DELETE", req.account.id);

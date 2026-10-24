@@ -1,9 +1,9 @@
 {
-  "name": "ai-classroom",
-  "version": "3.0.0",
+  "name": "onclasstime",
+  "version": "3.1.0",
   "private": true,
   "type": "module",
-  "description": "Windows pen-first AI classroom",
+  "description": "ONclasstime — learn, write, practice",
   "main": "dist-electron/main.cjs",
   "scripts": {
     "dev": "node scripts/dev.mjs",
@@ -16,12 +16,13 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:e2e": "playwright test",
-    "build": "npm run typecheck && vite build && node scripts/build.mjs",
-    "build:cloud": "prisma generate --schema prisma/postgres/schema.prisma && npm run typecheck && vite build",
+    "build": "npm run typecheck && node scripts/build-ui.mjs desktop && node scripts/build.mjs",
+    "build:cloud": "prisma generate --schema prisma/postgres/schema.prisma && npm run typecheck && node scripts/build-ui.mjs download",
+    "build:admin": "prisma generate --schema prisma/postgres/schema.prisma && npm run typecheck && node scripts/build-ui.mjs admin",
     "start": "node dist-server/index.cjs",
     "desktop": "electron .",
-    "package:win": "npm run build && electron-builder --win nsis --x64",
-    "package:portable": "npm run build && electron-builder --win dir --x64",
+    "package:win": "npm run build && powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package-windows.ps1",
+    "package:portable": "npm run build && node scripts/stage-desktop.mjs && electron-builder --win dir --x64",
     "db:postgres": "node scripts/postgres.mjs"
   },
   "dependencies": {
@@ -65,56 +66,29 @@
     "vitest": "^3.2.4"
   },
   "build": {
-    "appId": "org.aiclassroom.desktop",
-    "productName": "AI Classroom",
+    "appId": "app.onclasstime.desktop",
+    "productName": "ONclasstime",
     "asar": true,
     "directories": {
-      "output": "release"
+      "output": "release",
+      "app": "desktop-app"
     },
     "files": [
       "dist/**",
-      "dist-server/**",
       "dist-electron/**",
-      "node_modules/.prisma/**/*",
-      "package.json"
+      "package.json",
+      "!node_modules{,/**/*}"
     ],
     "extraResources": [
       {
-        "from": "prisma/migrations",
-        "to": "prisma/migrations"
-      },
-      {
         "from": "electron/native-speech.ps1",
         "to": "electron/native-speech.ps1"
-      },
-      {
-        "from": "node_modules/.prisma/client",
-        "to": "node_modules/.prisma/client"
-      },
-      {
-        "from": "node_modules/@prisma/client/runtime",
-        "to": "node_modules/@prisma/client/runtime"
-      },
-      {
-        "from": "node_modules/@prisma/client/package.json",
-        "to": "node_modules/@prisma/client/package.json"
       }
     ],
-    "asarUnpack": [
-      "node_modules/.prisma/**",
-      "node_modules/@prisma/**",
-      "node_modules/@node-rs/**",
-      "node_modules/@napi-rs/**"
-    ],
     "win": {
-      "target": "nsis",
-      "artifactName": "AI-Classroom-3.0.0-Setup.${ext}"
-    },
-    "nsis": {
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true,
-      "createDesktopShortcut": true,
-      "deleteAppDataOnUninstall": false
+      "target": "dir",
+      "artifactName": "ONclasstime-3.1.0-Setup.${ext}",
+      "icon": "build/icon.ico"
     }
   }
 }

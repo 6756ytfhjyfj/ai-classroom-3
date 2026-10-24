@@ -1,224 +1,52 @@
-import {
-  app,
-  BrowserWindow,
-  ipcMain,
-  safeStorage,
-  utilityProcess,
-  session,
-  dialog,
-} from "electron";
-import type { UtilityProcess, IpcMainInvokeEvent } from "electron";
-import {
-  readFileSync,
-  writeFileSync,
-  existsSync,
-  mkdirSync,
-  readdirSync,
-} from "node:fs";
-import { join } from "node:path";
-import { randomBytes } from "node:crypto";
-import { spawn, type ChildProcess } from "node:child_process";
-import { DatabaseSync } from "node:sqlite";
-import net from "node:net";
-let win: BrowserWindow | null = null,
-  server: UtilityProcess | null = null,
-  recognizer: ChildProcess | null = null,
-  baseURL = "";
-const root = app.getAppPath();
-function verify(event: IpcMainInvokeEvent) {
-  if (
-    !win ||
-    event.sender !== win.webContents ||
-    event.senderFrame?.origin !== baseURL
-  )
-    throw new Error("Untrusted IPC sender");
-}
-async function safeRead(name: string) {
-  const path = join(app.getPath("userData"), name);
-  return existsSync(path)
-    ? JSON.parse(
-        (await safeStorage.decryptStringAsync(readFileSync(path))).result,
-      )
-    : null;
-}
-async function safeWrite(name: string, value: unknown) {
-  if (!(await safeStorage.isAsyncEncryptionAvailable()))
-    throw new Error("Windows DPAPI 不可用");
-  writeFileSync(
-    join(app.getPath("userData"), name),
-    await safeStorage.encryptStringAsync(JSON.stringify(value)),
-  );
-}
-async function port(preferred = 0) {
-  return new Promise<number>((resolve, reject) => {
-    const s = net.createServer();
-    s.on("error", reject);
-    s.listen(preferred, "127.0.0.1", () => {
-      const p = (s.address() as net.AddressInfo).port;
-      s.close(() => resolve(p));
-    });
-  });
-}
-async function main() {
-  if (!app.requestSingleInstanceLock()) {
-    app.quit();
-    return;
+import {app,BrowserWindow,ipcMain,safeStorage,session,dialog,net as electronNet,screen} from 'electron';
+import type {IpcMainInvokeEvent} from 'electron';
+import {readFileSync,writeFileSync,existsSync,mkdirSync} from 'node:fs';
+import {join,resolve,extname} from 'node:path';
+import {spawn,type ChildProcess} from 'node:child_process';
+import {createServer,type Server} from 'node:http';
+let win:BrowserWindow|null=null,server:Server|null=null,recognizer:ChildProcess|null=null,baseURL='';
+app.setName('ONclasstime');
+const root=app.getAppPath();
+function verify(e:IpcMainInvokeEvent){if(!win||e.sender!==win.webContents||e.senderFrame!==e.sender.mainFrame||e.senderFrame?.origin!==baseURL)throw Error('Untrusted IPC sender')}
+async function config(){const file=join(app.getPath('userData'),'desktop.bin');if(existsSync(file))return JSON.parse((await safeStorage.decryptStringAsync(readFileSync(file))).result) as {port:number};return {port:0}}
+async function main(){
+ if(!app.requestSingleInstanceLock()){app.quit();return}await app.whenReady();
+ if(process.env.CLASSROOM_USER_DATA)app.setPath('userData',process.env.CLASSROOM_USER_DATA);
+ mkdirSync(app.getPath('userData'),{recursive:true});
+ app.on('second-instance',()=>{win?.show();win?.focus()});
+ const remote=new URL(process.env.CLASSROOM_SERVER_URL??'https://onclasstime.vercel.app');
+ if(remote.protocol!=='https:'&&!(process.env.ONCLASSTIME_ALLOW_LOCAL_TEST==='1'&&remote.protocol==='http:'&&['127.0.0.1','localhost'].includes(remote.hostname)))throw Error('学习服务必须使用 HTTPS');
+ const cfg=await config(),staticRoot=join(root,'dist');
+ const mime:Record<string,string>={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.png':'image/png','.svg':'image/svg+xml','.woff':'font/woff','.woff2':'font/woff2','.ttf':'font/ttf','.ico':'image/x-icon'};
+ server=createServer(async(req,res)=>{try{
+  const local=new URL(req.url??'/',baseURL||'http://127.0.0.1');
+  if(local.pathname.startsWith('/api/')){
+   if(req.headers.origin&&req.headers.origin!==baseURL){res.writeHead(403);res.end('来源未获授权');return}
+   if(req.headers['sec-fetch-site']==='cross-site'){res.writeHead(403);res.end('跨站请求已拒绝');return}
+   let bytes=0;const chunks:Buffer[]=[];for await(const chunk of req){bytes+=chunk.length;if(bytes>4*1024*1024){res.writeHead(413);res.end('请求超过4 MB');return}chunks.push(Buffer.from(chunk))}
+   const abort=new AbortController();res.once('close',()=>abort.abort());
+   const upstream=await electronNet.fetch(new URL(local.pathname+local.search,remote).href,{method:req.method,headers:{'Content-Type':String(req.headers['content-type']??'application/json'),Accept:String(req.headers.accept??'*/*'),Origin:remote.origin,...(req.headers.cookie?{Cookie:req.headers.cookie}:{})},body:['GET','HEAD'].includes(req.method??'GET')?undefined:Buffer.concat(chunks).toString('utf8'),redirect:'error',credentials:'omit',signal:abort.signal});
+   res.statusCode=upstream.status;
+   for(const key of ['content-type','cache-control','content-disposition','x-content-type-options']){const value=upstream.headers.get(key);if(value)res.setHeader(key,value)}
+   const cookies=upstream.headers.getSetCookie();if(cookies.length)res.setHeader('Set-Cookie',cookies.map(c=>c.replace(/;\s*Secure\b/gi,'')));
+   res.setHeader('Cache-Control','private, no-store');
+   if(upstream.body){const reader=upstream.body.getReader();try{while(true){const {done,value}=await reader.read();if(done||res.destroyed)break;if(!res.write(value))await new Promise<void>(resolve=>res.once('drain',resolve))}}finally{reader.releaseLock()}}res.end();return;
   }
-  await app.whenReady();
-  app.on("second-instance", () => {
-    win?.show();
-    win?.focus();
-  });
-  if (process.env.CLASSROOM_USER_DATA)
-    app.setPath("userData", process.env.CLASSROOM_USER_DATA);
-  const dataDir = app.getPath("userData");
-  mkdirSync(dataDir, { recursive: true });
-  const remote = process.env.CLASSROOM_SERVER_URL;
-  const bootstrapToken = process.argv.includes("--initialize-admin")
-    ? randomBytes(32).toString("base64url")
-    : undefined;
-  if (remote) {
-    const u = new URL(remote);
-    if (u.protocol !== "https:") throw new Error("集中服务端必须使用 HTTPS");
-    baseURL = u.origin;
-  } else {
-    const config = (await safeRead("server-key.bin")) ?? {
-      key: randomBytes(32).toString("base64"),
-      port: await port(),
-    };
-    await safeWrite("server-key.bin", config);
-    const dbPath = join(dataDir, "classroom.db");
-    const sqlite = new DatabaseSync(dbPath);
-    sqlite.exec("PRAGMA foreign_keys=ON;");
-    sqlite.exec(
-      "CREATE TABLE IF NOT EXISTS _desktop_migrations (name TEXT PRIMARY KEY)",
-    );
-    const migrations = join(
-      app.isPackaged ? process.resourcesPath : root,
-      "prisma",
-      "migrations",
-    );
-    for (const name of readdirSync(migrations)
-      .filter((n) => /^\d/.test(n))
-      .sort()) {
-      if (
-        !sqlite
-          .prepare("SELECT name FROM _desktop_migrations WHERE name=?")
-          .get(name)
-      ) {
-        const sql = readFileSync(
-          join(migrations, name, "migration.sql"),
-          "utf8",
-        );
-        sqlite.exec("BEGIN IMMEDIATE");
-        try {
-          sqlite.exec(sql);
-          sqlite
-            .prepare("INSERT INTO _desktop_migrations (name) VALUES (?)")
-            .run(name);
-          sqlite.exec("COMMIT");
-        } catch (e) {
-          sqlite.exec("ROLLBACK");
-          throw e;
-        }
-      }
-    }
-    sqlite.close();
-    const p = await port(config.port);
-    baseURL = `http://127.0.0.1:${p}`;
-    server = utilityProcess.fork(join(root, "dist-server", "index.cjs"), [], {
-      cwd: dataDir,
-      env: {
-        ...process.env,
-        NODE_ENV: "production",
-        DATABASE_URL: "file:" + dbPath.replace(/\\/g, "/"),
-        ENCRYPTION_KEY: config.key,
-        PORT: String(p),
-        HOST: "127.0.0.1",
-        APP_ORIGIN: baseURL,
-        CLASSROOM_STATIC_DIR: join(root, "dist"),
-        ...(bootstrapToken
-          ? { CLASSROOM_BOOTSTRAP_TOKEN: bootstrapToken }
-          : {}),
-      },
-      stdio: "pipe",
-    });
-    server.stderr?.on("data", (chunk) =>
-      writeFileSync(join(dataDir, "last-server-error.log"), chunk),
-    );
-    let ready = false;
-    for (let i = 0; i < 100; i++) {
-      try {
-        const res = await fetch(baseURL + "/api/health");
-        if (res.ok) {
-          ready = true;
-          break;
-        }
-      } catch {}
-      await new Promise((r) => setTimeout(r, 100));
-    }
-    if (!ready)
-      throw new Error(
-        "本地服务启动失败，请查看应用数据目录 last-server-error.log",
-      );
-  }
-  win = new BrowserWindow({
-    width: 1530,
-    height: 980,
-    minWidth: 1024,
-    minHeight: 720,
-    backgroundColor: "#f6f7fb",
-    title: "AI Classroom",
-    autoHideMenuBar: true,
-    webPreferences: {
-      preload: join(root, "dist-electron", "preload.cjs"),
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: true,
-      spellcheck: false,
-    },
-  });
-  win.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
-  win.webContents.on("will-prevent-unload", (event) => {
-    const choice = dialog.showMessageBoxSync(win!, {
-      type: "question",
-      title: "保留当前学习内容",
-      message:
-        "当前有未提交内容。文字与手写草稿会保留在此设备，尚未同步的实验参数可能需要重试。",
-      buttons: ["返回课堂", "保留草稿并退出"],
-      defaultId: 0,
-      cancelId: 0,
-    });
-    if (choice === 1) event.preventDefault();
-  });
-  win.webContents.on("will-navigate", (e, url) => {
-    if (new URL(url).origin !== baseURL) e.preventDefault();
-  });
-  session.defaultSession.setPermissionRequestHandler(
-    (contents, permission, callback) =>
-      callback(
-        contents === win?.webContents &&
-          new URL(contents.getURL()).origin === baseURL &&
-          ["media", "fullscreen"].includes(permission),
-      ),
-  );
-  ipcMain.handle("device:read", (event) => {
-    verify(event);
-    return safeRead("device.bin");
-  });
-  ipcMain.handle("device:write", async (event, data) => {
-    verify(event);
-    if (
-      !data ||
-      typeof data.secret !== "string" ||
-      data.secret.length < 32 ||
-      data.secret.length > 200 ||
-      !/^[-\w]{36}$/.test(data.installationId)
-    )
-      throw new Error("Invalid device proof");
-    await safeWrite("device.bin", data);
-    return true;
-  });
+  if(local.pathname.startsWith('/admin')||local.pathname==='/setup'){res.writeHead(404);res.end('管理控制台在独立网站提供');return}
+  const path=local.pathname==='/'?join(staticRoot,'index.html'):resolve(staticRoot,'.'+decodeURIComponent(local.pathname));
+  if(!path.startsWith(staticRoot+'\\')&&path!==join(staticRoot,'index.html')){res.writeHead(404);res.end();return}
+  if(!existsSync(path)){res.writeHead(404);res.end();return}
+  res.setHeader('Content-Type',mime[extname(path)]??'application/octet-stream');res.setHeader('Content-Security-Policy',"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; media-src 'self' blob:; object-src 'none'; frame-ancestors 'none'; base-uri 'self'");res.setHeader('X-Content-Type-Options','nosniff');res.end(readFileSync(path));
+ }catch{if(!res.headersSent){res.writeHead(502,{'Content-Type':'application/json'});res.end(JSON.stringify({code:'SERVICE_UNAVAILABLE',message:'暂时无法连接学习服务，请检查网络后重试；本机草稿仍保留。'}))}else res.end()}});
+ await new Promise<void>((resolve,reject)=>{server!.once('error',reject);server!.listen(cfg.port,'127.0.0.1',resolve)});
+ const address=server.address();if(!address||typeof address==='string')throw Error('本地界面启动失败');baseURL='http://127.0.0.1:'+address.port;
+ await safeStorage.isAsyncEncryptionAvailable().then(ok=>{if(!ok)throw Error('Windows DPAPI 不可用')});
+ writeFileSync(join(app.getPath('userData'),'desktop.bin'),await safeStorage.encryptStringAsync(JSON.stringify({port:address.port})));
+ const area=screen.getPrimaryDisplay().workAreaSize;
+ win=new BrowserWindow({width:Math.min(1500,area.width),height:Math.min(980,area.height),minWidth:1100,minHeight:700,title:'ONclasstime',backgroundColor:'#f6f7fb',autoHideMenuBar:true,webPreferences:{preload:join(root,'dist-electron','preload.cjs'),contextIsolation:true,nodeIntegration:false,sandbox:true,spellcheck:false}});
+ win.webContents.setWindowOpenHandler(()=>({action:'deny'}));win.webContents.on('will-navigate',(e,url)=>{if(new URL(url).origin!==baseURL)e.preventDefault()});
+ win.webContents.on('will-prevent-unload',event=>{const choice=dialog.showMessageBoxSync(win!,{type:'question',title:'保留当前学习内容',message:'未提交的文字、笔记与手写草稿会保留在本机。确定退出？',buttons:['继续学习','保留草稿并退出'],defaultId:0,cancelId:0});if(choice===1)event.preventDefault()});
+ session.defaultSession.setPermissionRequestHandler((contents,permission,callback)=>callback(contents===win?.webContents&&new URL(contents.getURL()).origin===baseURL&&['media','fullscreen'].includes(permission)));
   ipcMain.handle("window:fullscreen", (event, enabled) => {
     verify(event);
     win?.setFullScreen(enabled === true);
@@ -287,26 +115,8 @@ async function main() {
     recognizer = null;
     return true;
   });
-  await win.loadURL(
-    baseURL +
-      (bootstrapToken && !remote
-        ? "/admin/setup#" + bootstrapToken
-        : process.argv.includes("--admin")
-          ? "/admin"
-          : ""),
-  );
-  win.on("closed", () => {
-    recognizer?.kill();
-    server?.kill();
-    win = null;
-    app.quit();
-  });
+
+ await win.loadURL(baseURL);
+ win.on('closed',()=>{recognizer?.kill();server?.close();win=null;app.quit()});
 }
-main().catch((e) => {
-  dialog.showErrorBox(
-    "AI Classroom 启动失败",
-    e instanceof Error ? e.message : String(e),
-  );
-  app.quit();
-});
-app.on("window-all-closed", () => app.quit());
+main().catch(e=>{dialog.showErrorBox('ONclasstime 启动失败',e instanceof Error?e.message:String(e));app.quit()});app.on('window-all-closed',()=>app.quit());

@@ -16,7 +16,7 @@ export async function adminRoutes(app: FastifyInstance) {
   app.addHook("preHandler", adminOnly);
   app.get("/api/admin/overview", async () => ({
     users: await db.user.count(),
-    devices: await db.device.count(),
+    questions: (await import("../shared/questions.js")).questionCount + await db.questionRecord.count(),
     messages: await db.message.count(),
     executions: await db.skillExecution.count(),
   }));
@@ -203,106 +203,6 @@ export async function adminRoutes(app: FastifyInstance) {
     ]);
     return { ok: true };
   });
-  app.get("/api/admin/devices", async () => ({
-    devices: await db.device.findMany({
-      select: {
-        id: true,
-        status: true,
-        createdAt: true,
-        bindings: {
-          select: {
-            id: true,
-            userId: true,
-            slot: true,
-            bindingStatus: true,
-            user: { select: { displayName: true } },
-          },
-        },
-        installations: { select: { id: true, lastSeenAt: true } },
-      },
-      take: 500,
-    }),
-  }));
-  app.post("/api/admin/devices", async (req) => {
-    const { reason } = z
-        .object({ reason: z.string().min(10).max(500) })
-        .parse(req.body),
-      secret = token();
-    const device = await db.$transaction(async (tx) => {
-      const d = await tx.device.create({
-        data: { registrationIdentifier: digest(secret) },
-      });
-      await tx.administratorAuditLog.create({
-        data: {
-          actorId: req.account.id,
-          action: "DEVICE_ENROLL",
-          targetId: d.id,
-          detail: JSON.stringify({ reason }),
-        },
-      });
-      return d;
-    });
-    return { secret, deviceId: device.id };
-  });
-  app.post("/api/admin/devices/:id/reset", async (req) => {
-    const { id } = req.params as { id: string };
-    const p = z
-      .object({
-        confirmDeviceId: z.string(),
-        reason: z.string().min(10).max(500),
-      })
-      .parse(req.body);
-    if (p.confirmDeviceId !== id)
-      throw new AppError(400, "CONFIRM_REQUIRED", "设备 ID 确认不一致");
-    await serialized(() =>
-      db.$transaction(async (tx) => {
-        await tx.device.update({
-          where: { id },
-          data: { lockVersion: { increment: 1 } },
-        });
-        await tx.deviceAccountBinding.updateMany({
-          where: { deviceId: id },
-          data: { slot: null, bindingStatus: "RELEASED_BY_ADMIN" },
-        });
-        await tx.administratorAuditLog.create({
-          data: {
-            actorId: req.account.id,
-            action: "DEVICE_SLOTS_RESET",
-            targetId: id,
-            detail: JSON.stringify({ reason: p.reason }),
-          },
-        });
-      }),
-    );
-    return { ok: true };
-  });
-  app.post("/api/admin/devices/:id/rebind", async (req) => {
-    const { id } = req.params as { id: string };
-    const p = z.object({ reason: z.string().min(10).max(500) }).parse(req.body),
-      secret = token();
-    await db.$transaction([
-      db.device.update({
-        where: { id },
-        data: { registrationIdentifier: digest(secret) },
-      }),
-      db.authSession.updateMany({
-        where: { deviceId: id },
-        data: { revokedAt: new Date() },
-      }),
-      db.administratorAuditLog.create({
-        data: {
-          actorId: req.account.id,
-          action: "DEVICE_REBIND",
-          targetId: id,
-          detail: JSON.stringify(p),
-        },
-      }),
-    ]);
-    return {
-      secret,
-      notice: "一次性显示，请通过安全渠道交给申请人；旧凭证已失效",
-    };
-  });
   app.get("/api/admin/requests", async () => ({
     requests: await db.recoveryRequest.findMany({
       orderBy: { createdAt: "desc" },
@@ -329,6 +229,9 @@ export async function adminRoutes(app: FastifyInstance) {
         )
           throw new AppError(400, "INVALID_DELETE", "无法删除该账号");
         await tx.classroom.deleteMany({ where: { userId: r.userId } });
+        await tx.questionAttempt.deleteMany({where:{userId:r.userId}});
+        await tx.wrongProblem.deleteMany({where:{userId:r.userId}});
+        await tx.notebook.deleteMany({where:{userId:r.userId}});
         await tx.authSession.deleteMany({ where: { userId: r.userId } });
         await tx.deviceAccountBinding.updateMany({
           where: { userId: r.userId },

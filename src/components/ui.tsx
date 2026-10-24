@@ -106,14 +106,9 @@ export function Spinner() {
 }
 export function Brand({ small = false }: { small?: boolean }) {
   return (
-    <div className={"brand " + (small ? "small" : "")}>
-      <span className="brand-mark">
-        a<span>✧</span>
-      </span>
-      <div>
-        AI Classroom<small>让好奇，自由生长</small>
-      </div>
-      <sup>3.0</sup>
+    <div className={"brand brand-asset " + (small ? "small" : "")}>
+      <span className="brand-logo"><img src="/brand/logo-transparent.png" alt="ONclasstime"/></span>
+      <small className="brand-watermark">Power By ONtimeclass</small>
     </div>
   );
 }
