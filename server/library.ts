@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { randomUUID } from "node:crypto";
+import { randomUUID, createHash } from "node:crypto";
 import { z } from "zod";
 import { db,audit } from "./db.js";
 import { authenticate,adminOnly } from "./auth.js";
@@ -7,17 +7,21 @@ import { AppError } from "./security.js";
 import { subjectId } from "../shared/protocol.js";
 import { checkAnswer,generatedQuestion,listGenerated,publicQuestion,questionCatalog,questionCount,type SolvedQuestion } from "../shared/questions.js";
 import { questionImportSchema,wrongCreateSchema,wrongUpdateSchema } from "../shared/library.js";
+import { IMAGE_STORAGE_BYTES, MAX_IMAGE_BYTES } from "../shared/image-limits.js";
+import { imageUploadRoutes } from "./image-uploads.js";
 const paging=z.object({page:z.coerce.number().int().min(1).max(100000).default(1),pageSize:z.coerce.number().int().min(1).max(50).default(20),subjectId:subjectId.optional(),topic:z.string().max(60).optional(),q:z.string().max(100).optional(),difficulty:z.coerce.number().int().min(1).max(3).optional()});
 const wrongSelect={id:true,subjectId:true,title:true,prompt:true,answer:true,correctAnswer:true,explanation:true,note:true,questionId:true,imageMime:true,imageBytes:true,status:true,reviewAt:true,revision:true,updatedAt:true} as const;
 export function parseUpload(data:string){
  const match=/^data:(image\/(?:png|jpeg|webp));base64,([A-Za-z0-9+/]+={0,2})$/.exec(data);if(!match)throw new AppError(400,"IMAGE_TYPE","仅支持 PNG、JPEG 或 WebP 图片");
- const b=Buffer.from(match[2],"base64");if(b.length>2*1024*1024||b.length<12)throw new AppError(400,"IMAGE_SIZE","图片必须小于 2 MB");
+ const b=Buffer.from(match[2],"base64");if(b.length>MAX_IMAGE_BYTES||b.length<12)throw new AppError(400,"IMAGE_SIZE","单张图片不能超过 10 MB");
+ if(b.toString("base64")!==match[2])throw new AppError(400,"IMAGE_TYPE","图片编码无效");
  const mime=b.subarray(0,8).equals(Buffer.from([137,80,78,71,13,10,26,10]))?"image/png":b[0]===255&&b[1]===216&&b[2]===255?"image/jpeg":b.toString("ascii",0,4)==="RIFF"&&b.toString("ascii",8,12)==="WEBP"?"image/webp":null;
  if(mime!==match[1])throw new AppError(400,"IMAGE_TYPE","图片文件内容与类型不符");return {imageData:match[2],imageMime:mime,imageBytes:b.length};
 }
 async function question(id:string):Promise<SolvedQuestion>{const generated=generatedQuestion(id);if(generated)return generated;const row=await db.questionRecord.findFirst({where:{id,enabled:true}});if(!row)throw new AppError(404,"QUESTION_NOT_FOUND","题目不存在");return questionImportSchema.parse({...row,options:JSON.parse(row.options)}) as SolvedQuestion}
 export async function libraryRoutes(app:FastifyInstance){
  app.addHook("preHandler",authenticate);
+ await imageUploadRoutes(app);
  app.get("/api/library/stats",async req=>({questions:questionCount+await db.questionRecord.count({where:{enabled:true}}),wrong:await db.wrongProblem.count({where:{userId:req.account.id,status:"REVIEW"}}),notebooks:await db.notebook.count({where:{userId:req.account.id}}),notes:await db.note.count({where:{userId:req.account.id}}),attempts:await db.questionAttempt.count({where:{userId:req.account.id}})}));
  app.get("/api/questions/catalog",async()=>({catalog:questionCatalog,total:questionCount,imported:await db.questionRecord.count({where:{enabled:true}}),description:"数理化原创可计算变式与六学科基础题。可计算变式不是历年考试真题。"}));
  app.get("/api/questions",async req=>{
@@ -35,16 +39,24 @@ export async function libraryRoutes(app:FastifyInstance){
  });
  app.get("/api/wrongs",async req=>{
   const p=paging.extend({status:z.enum(["REVIEW","MASTERED"]).optional()}).parse(req.query);const where={userId:req.account.id,...(p.subjectId?{subjectId:p.subjectId}:{}),...(p.status?{status:p.status}:{}),...(p.q?{OR:[{title:{contains:p.q}},{prompt:{contains:p.q}},{note:{contains:p.q}}]}:{})};
-  return {total:await db.wrongProblem.count({where}),items:await db.wrongProblem.findMany({where,select:wrongSelect,orderBy:{updatedAt:"desc"},take:p.pageSize,skip:(p.page-1)*p.pageSize}),uploadBytes:(await db.wrongProblem.aggregate({where:{userId:req.account.id},_sum:{imageBytes:true}}))._sum.imageBytes??0,uploadLimit:20*1024*1024};
+  return {total:await db.wrongProblem.count({where}),items:await db.wrongProblem.findMany({where,select:wrongSelect,orderBy:{updatedAt:"desc"},take:p.pageSize,skip:(p.page-1)*p.pageSize}),uploadBytes:(await db.wrongProblem.aggregate({where:{userId:req.account.id},_sum:{imageBytes:true}}))._sum.imageBytes??0,uploadLimit:IMAGE_STORAGE_BYTES};
  });
  app.post("/api/wrongs",async req=>{
-  const p=wrongCreateSchema.parse(req.body),{imageData,...data}=p,upload=imageData?parseUpload(imageData):{imageBytes:0};
+  const p=wrongCreateSchema.parse(req.body),{imageData,imageUploadId,...data}=p;
   return db.$transaction(async tx=>{
    // Lock the account row so simultaneous image uploads cannot exceed its quota.
    await tx.user.update({where:{id:req.account.id},data:{updatedAt:new Date()}});
+   if(imageUploadId){const existing=await tx.wrongProblem.findFirst({where:{id:imageUploadId,userId:req.account.id},select:wrongSelect});if(existing)return existing;}
+   const pending=imageUploadId?await tx.imageUpload.findFirst({where:{id:imageUploadId,userId:req.account.id,expiresAt:{gt:new Date()}}}):null;
+   if(imageUploadId&&(!pending||pending.receivedBytes!==pending.bytes))throw new AppError(409,"UPLOAD_INCOMPLETE","图片未上传完整或已过期，请重试");
+   const upload=pending?parseUpload(`data:${pending.mime};base64,${pending.data}`):imageData?parseUpload(imageData):{imageBytes:0};
+   if(pending&&createHash("sha256").update(Buffer.from(pending.data,"base64")).digest("hex")!==pending.sha256)throw new AppError(400,"IMAGE_INTEGRITY","图片校验失败，请重新上传");
    const used=(await tx.wrongProblem.aggregate({where:{userId:req.account.id},_sum:{imageBytes:true}}))._sum.imageBytes??0;
-   if(used+upload.imageBytes>20*1024*1024)throw new AppError(409,"UPLOAD_QUOTA","图片存储已达 20 MB，请清理不再需要的错题图片");
-   return tx.wrongProblem.create({data:{...data,...upload,userId:req.account.id},select:wrongSelect});
+   const reserved=(await tx.imageUpload.aggregate({where:{userId:req.account.id,expiresAt:{gt:new Date()},...(imageUploadId?{id:{not:imageUploadId}}:{})},_sum:{bytes:true}}))._sum.bytes??0;
+   if(used+reserved+upload.imageBytes>IMAGE_STORAGE_BYTES)throw new AppError(409,"UPLOAD_QUOTA","图片存储已达 20 MB，请清理不再需要的错题图片");
+   const result=await tx.wrongProblem.create({data:{...data,...upload,...(imageUploadId?{id:imageUploadId}:{}),userId:req.account.id},select:wrongSelect});
+   if(pending)await tx.imageUpload.delete({where:{id:pending.id}});
+   return result;
   },{maxWait:15000,timeout:15000});
  });
  app.get("/api/wrongs/:id/image",async(req,reply)=>{

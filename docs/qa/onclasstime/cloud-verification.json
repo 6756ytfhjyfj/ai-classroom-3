@@ -1,7 +1,8 @@
 {
-  "origin": "https://ai-classroom-3-9jtcsjpws-illit18349619989-9055.vercel.app",
+  "origin": "https://ai-classroom-3-8capiy2tf-illit18349619989-9055.vercel.app",
   "checks": [
     "下载站首页与动态背景",
+    "真实安装包链接、大小与 SHA-256",
     "真实云端 API 与后台认证",
     "公网用户名密码注册",
     "PostgreSQL 题库判分与错题持久化",

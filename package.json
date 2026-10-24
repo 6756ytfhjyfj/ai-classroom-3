@@ -1,6 +1,6 @@
 {
   "name": "onclasstime",
-  "version": "3.1.0",
+  "version": "3.1.1",
   "private": true,
   "type": "module",
   "description": "ONclasstime — learn, write, practice",
@@ -87,7 +87,7 @@
     ],
     "win": {
       "target": "dir",
-      "artifactName": "ONclasstime-3.1.0-Setup.${ext}",
+      "artifactName": "ONclasstime-3.1.1-Setup.${ext}",
       "icon": "build/icon.ico"
     }
   }

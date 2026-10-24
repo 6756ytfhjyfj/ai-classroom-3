@@ -23,9 +23,9 @@ jobs:
       - run: npm run package:win
       - uses: actions/upload-artifact@v4
         with:
-          name: ONclasstime-3.1.0-Windows
+          name: ONclasstime-3.1.1-Windows
           path: |
-            release/ONclasstime-3.1.0-Setup.exe
+            release/ONclasstime-3.1.1-Setup.exe
             release/SHA256SUMS.txt
   publish:
     if: inputs.publish_release
@@ -36,7 +36,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: ONclasstime-3.1.0-Windows
+          name: ONclasstime-3.1.1-Windows
           path: release
       - name: Upload release files
         shell: pwsh
@@ -44,10 +44,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $ErrorActionPreference = 'Stop'
-          $releaseId = 422568909
+          $releaseId = gh api "repos/${{ github.repository }}/releases/tags/v3.1.1" --jq .id
+          if ($LASTEXITCODE -ne 0) { throw "Prepared release v3.1.1 not found" }
           $repo = '${{ github.repository }}'
           $assets = gh api "repos/$repo/releases/$releaseId/assets" | ConvertFrom-Json
-          foreach ($name in @('ONclasstime-3.1.0-Setup.exe','SHA256SUMS.txt')) {
+          foreach ($name in @('ONclasstime-3.1.1-Setup.exe','SHA256SUMS.txt')) {
             foreach ($asset in $assets | Where-Object name -eq $name) {
               gh api --method DELETE "repos/$repo/releases/assets/$($asset.id)"
               if ($LASTEXITCODE -ne 0) { throw 'Could not replace draft release asset' }

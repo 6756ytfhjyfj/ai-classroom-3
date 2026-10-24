@@ -38,9 +38,9 @@ if(Test-Path -LiteralPath $payload){Remove-Item -LiteralPath $payload}
 [IO.Compression.ZipFile]::CreateFromDirectory((Join-Path $repo 'release\win-unpacked'),$payload,[IO.Compression.CompressionLevel]::Optimal,$false)
 $hash=Get-Sha256 $payload
 [IO.File]::WriteAllText($info,('public static class PayloadInfo { public const string Hash="'+$hash+'"; public const string Website="'+$website+'"; }'))
-$output=Join-Path $repo 'release\ONclasstime-3.1.0-Setup.exe'
+$output=Join-Path $repo 'release\ONclasstime-3.1.1-Setup.exe'
 & (Join-Path $f 'csc.exe') /nologo /target:winexe /platform:x64 $brand $icon $manifest $refs ('/resource:'+$payload+',payload.zip') ('/out:'+$output) $source $info
 if($LASTEXITCODE -ne 0){throw 'Installer compilation failed'}
 $digest=Get-Sha256 $output
-[IO.File]::WriteAllText((Join-Path $repo 'release\SHA256SUMS.txt'),$digest+'  ONclasstime-3.1.0-Setup.exe'+[Environment]::NewLine)
+[IO.File]::WriteAllText((Join-Path $repo 'release\SHA256SUMS.txt'),$digest+'  ONclasstime-3.1.1-Setup.exe'+[Environment]::NewLine)
 Write-Output ('Installer ready: '+$output)

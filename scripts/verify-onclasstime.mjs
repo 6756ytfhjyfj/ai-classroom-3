@@ -45,6 +45,6 @@ try{
  await page.getByRole('button',{name:'练习题库',exact:true}).click();
  await page.getByLabel('选择学科').selectOption('physics');await page.getByLabel('知识点').selectOption('ohm');
  await page.getByLabel('你的答案').waitFor();await page.screenshot({path:out+'/desktop-preview.png'});check('物理筛选与真实客户端界面');
- if(desktop){expect(await page.evaluate(()=>window.desktop.version())).toBe('3.1.0');await page.evaluate(()=>window.desktop.fullscreen(true));await page.evaluate(()=>window.desktop.fullscreen(false));check('安装后原生桥接与全屏')}
+ if(desktop){expect(await page.evaluate(()=>window.desktop.version())).toBe('3.1.1');await page.evaluate(()=>window.desktop.fullscreen(true));await page.evaluate(()=>window.desktop.fullscreen(false));check('安装后原生桥接与全屏')}
  expect(report.errors).toEqual([]);
 }finally{writeFileSync(out+'/verification.json',JSON.stringify(report,null,2));if(report.errors.length||!report.checks.includes('物理筛选与真实客户端界面'))await page.screenshot({path:out+'/failure.png'}).catch(()=>{});await launched.close();console.log(JSON.stringify(report))}

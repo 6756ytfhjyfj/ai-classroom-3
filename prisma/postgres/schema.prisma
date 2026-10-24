@@ -23,6 +23,7 @@ model User {
   recoveryRequests RecoveryRequest[]
   questionAttempts QuestionAttempt[]
   wrongProblems WrongProblem[]
+  imageUploads ImageUpload[]
   notebooks Notebook[]
   notes Note[]
 }
@@ -309,4 +310,19 @@ model RecoveryRequest {
   status String @default("PENDING")
   createdAt DateTime @default(now())
   user User? @relation(fields:[userId], references:[id])
+}
+
+model ImageUpload {
+  id String @id @default(uuid())
+  userId String
+  mime String
+  bytes Int
+  sha256 String
+  receivedBytes Int @default(0)
+  data String @default("")
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user User @relation(fields:[userId], references:[id], onDelete:Cascade)
+  @@index([userId, expiresAt])
+  @@index([expiresAt])
 }
