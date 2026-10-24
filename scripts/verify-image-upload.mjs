@@ -95,13 +95,11 @@ try {
   await page.getByRole("button", { name: "我的错题", exact: true }).click();
   await page.getByRole("button", { name: "上传错题", exact: true }).click();
   const dialog = page.getByRole("dialog");
-  await dialog
-    .locator("input[type=file]")
-    .setInputFiles({
-      name: "10MB-original.png",
-      mimeType: "image/png",
-      buffer: image,
-    });
+  await dialog.locator("input[type=file]").setInputFiles({
+    name: "10MB-original.png",
+    mimeType: "image/png",
+    buffer: image,
+  });
   await expect(dialog.locator(".upload-preview")).toBeVisible();
   expect(
     await dialog.locator(".upload-preview").evaluate((img) => img.naturalWidth),
@@ -128,13 +126,19 @@ try {
   report.checks.push("10 MB 边界原图真实上传，3200px 原尺寸保留，列表正常读取");
   const digest = await page.evaluate(
     async ({ id, parts }) => {
-      const bytes = [];
-      for (let i = 0; i < parts; i++) {
-        const r = await fetch(`/api/wrongs/${id}/image/chunks/${i}`);
-        if (!r.ok) throw Error("Image read " + r.status);
-        const p = await r.json();
-        bytes.push(Uint8Array.from(atob(p.data), (c) => c.charCodeAt(0)));
-      }
+      const bytes = new Array(parts);
+      let next = 0;
+      await Promise.all(
+        Array.from({ length: Math.min(4, parts) }, async () => {
+          while (next < parts) {
+            const i = next++;
+            const r = await fetch(`/api/wrongs/${id}/image/chunks/${i}`);
+            if (!r.ok) throw Error("Image read " + r.status);
+            const p = await r.json();
+            bytes[i] = Uint8Array.from(atob(p.data), (c) => c.charCodeAt(0));
+          }
+        }),
+      );
       const blob = new Blob(bytes);
       return Array.from(
         new Uint8Array(

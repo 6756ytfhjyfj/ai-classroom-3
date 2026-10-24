@@ -121,15 +121,33 @@ export async function wrongImageBlob(
     if (!response.ok) throw Error("图片读取失败");
     return response.blob();
   }
-  const parts: BlobPart[] = [];
-  let mime = "";
-  for (let index = 0; index < Math.ceil(bytes / IMAGE_CHUNK_BYTES); index++) {
-    const part = await api<{ data: string; mime: string }>(
-      `/wrongs/${id}/image/chunks/${index}`,
-      { signal },
+  const count = Math.ceil(bytes / IMAGE_CHUNK_BYTES);
+  const parts: BlobPart[] = new Array(count);
+  let mime = "",
+    next = 0;
+  const controller = new AbortController();
+  const readSignal = signal
+    ? AbortSignal.any([signal, controller.signal])
+    : controller.signal;
+  try {
+    await Promise.all(
+      Array.from({ length: Math.min(4, count) }, async () => {
+        while (next < count) {
+          const index = next++;
+          const part = await api<{ data: string; mime: string }>(
+            `/wrongs/${id}/image/chunks/${index}`,
+            { signal: readSignal },
+          );
+          parts[index] = Uint8Array.from(atob(part.data), (c) =>
+            c.charCodeAt(0),
+          );
+          mime = part.mime;
+        }
+      }),
     );
-    parts.push(Uint8Array.from(atob(part.data), (c) => c.charCodeAt(0)));
-    mime = part.mime;
+  } catch (error) {
+    controller.abort();
+    throw error;
   }
   const blob = new Blob(parts, { type: mime });
   if (blob.size !== bytes) throw Error("图片未读取完整，请重试");
