@@ -44,8 +44,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $ErrorActionPreference = 'Stop'
-          $releaseId = gh api "repos/${{ github.repository }}/releases/tags/v3.1.1" --jq .id
-          if ($LASTEXITCODE -ne 0) { throw "Prepared release v3.1.1 not found" }
+          $releases = gh api "repos/${{ github.repository }}/releases" | ConvertFrom-Json
+          $releaseId = ($releases | Where-Object tag_name -eq 'v3.1.1' | Select-Object -First 1).id
+          if ($LASTEXITCODE -ne 0 -or -not $releaseId) { throw "Prepared release v3.1.1 not found" }
           $repo = '${{ github.repository }}'
           $assets = gh api "repos/$repo/releases/$releaseId/assets" | ConvertFrom-Json
           foreach ($name in @('ONclasstime-3.1.1-Setup.exe','SHA256SUMS.txt')) {
