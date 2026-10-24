@@ -1,4 +1,10 @@
 $ErrorActionPreference='Stop'
+function Get-Sha256([string]$targetFile) {
+  $hasher=[Security.Cryptography.SHA256]::Create()
+  $hashStream=[IO.File]::OpenRead($targetFile)
+  try { return [BitConverter]::ToString($hasher.ComputeHash($hashStream)).Replace('-','').ToLowerInvariant() }
+  finally { $hashStream.Dispose(); $hasher.Dispose() }
+}
 $repo=(Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 Set-Location $repo
 $env:ELECTRON_BUILDER_CACHE=Join-Path $repo '..\builder-cache'
@@ -30,11 +36,11 @@ Add-Type -AssemblyName System.IO.Compression.FileSystem
 $payload=Join-Path $generated 'payload.zip'
 if(Test-Path -LiteralPath $payload){Remove-Item -LiteralPath $payload}
 [IO.Compression.ZipFile]::CreateFromDirectory((Join-Path $repo 'release\win-unpacked'),$payload,[IO.Compression.CompressionLevel]::Optimal,$false)
-$hash=(Get-FileHash -LiteralPath $payload -Algorithm SHA256).Hash.ToLowerInvariant()
+$hash=Get-Sha256 $payload
 [IO.File]::WriteAllText($info,('public static class PayloadInfo { public const string Hash="'+$hash+'"; public const string Website="'+$website+'"; }'))
 $output=Join-Path $repo 'release\ONclasstime-3.1.0-Setup.exe'
 & (Join-Path $f 'csc.exe') /nologo /target:winexe /platform:x64 $brand $icon $manifest $refs ('/resource:'+$payload+',payload.zip') ('/out:'+$output) $source $info
 if($LASTEXITCODE -ne 0){throw 'Installer compilation failed'}
-$digest=(Get-FileHash -LiteralPath $output -Algorithm SHA256).Hash.ToLowerInvariant()
+$digest=Get-Sha256 $output
 [IO.File]::WriteAllText((Join-Path $repo 'release\SHA256SUMS.txt'),$digest+'  ONclasstime-3.1.0-Setup.exe'+[Environment]::NewLine)
 Write-Output ('Installer ready: '+$output)

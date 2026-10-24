@@ -31,3 +31,7 @@ AI_ALLOWED_HOSTS 限制可配置 AI 服务主机。生产密钥不出现在客�
 Windows 运行 npm run package:win，得到 release/ONclasstime-3.1.0-Setup.exe 和 SHA256SUMS.txt。程序默认连接 https://onclasstime.vercel.app，可用 CLASSROOM_SERVER_URL 指向其他可信 HTTPS 部署。进程隔离、沙箱、导航限制与 IPC 来源验证保持开启。
 
 先验证预发布部署的页面、API 和数据库完整路径，再正式推广。GitHub 源码推送与 Vercel 部署分别执行；当前账号未接通 Git 自动部署时，必须使用已登录的 Vercel CLI，不能把 git push 当成已上线。
+
+### 独立管理站的预构建发布
+
+当前管理站采用预构建静态发布，项目根目录设为空，保留源目录 admin-site 供维护。运行 `npm run build:admin`、`node scripts/prepare-admin-output.mjs`，进入 admin-site 关联独立项目，再执行 `vercel deploy --prebuilt --archive=tgz --prod`。这个项目只包含管理界面的静态资源及同源 API 转发，无数据库/模型密钥。
