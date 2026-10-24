@@ -368,3 +368,14 @@ export type StreamEvent =
     }
   | { type: "done"; messageId: string }
   | { type: "error"; code: string; message: string };
+
+export type ProviderTestEvent =
+  | { type: "progress"; message: string }
+  | {
+      type: "result";
+      model: string;
+      elapsedMs: number;
+      reply: string;
+      apiMode: string;
+    }
+  | { type: "error"; code: string; message: string };

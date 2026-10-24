@@ -16,6 +16,12 @@
 
 AI_ALLOWED_HOSTS 限制可配置 AI 服务主机。生产密钥不出现在客户端，也不得写入源码、构建日志或 Vercel 的公开 VITE_ 变量。
 
+Gemini 当前部署设置 `GEMINI_API_MODE=interactions`，使用官方 SDK 的 Interactions 流式接口，始终发送 `store:false`，课堂上下文由本服务保存。兼容旧模型时可以设置 `GEMINI_API_MODE=content` 使用 generateContent；切换环境变量后重新部署。两种接口均使用 `x-goog-api-key` 请求头，不判断或修改 AQ / AIza 前缀。
+
+后台“真实连接测试”先验证 Google 模型访问，再等待实际生成文本；只有第二步成功才显示成功。测试通过同源 SSE 每 5 秒保活并显示进度。`PROVIDER_UNAVAILABLE` 表示上游繁忙（例如 503），`PROVIDER_TIMEOUT` 表示生成超时，`PROVIDER_NETWORK_ERROR` 表示服务器到模型的网络中断，`NETWORK_ERROR` 表示浏览器到本服务的连接失败。这些情况不能混同于密钥无效。繁忙时稍后重试；持续生成超时时可在后台将请求超时从 60000 调为 120000 ms，保存后再测试。密钥和权限错误单独显示，测试不会自动切换模型或重发生成请求。
+
+官方接口说明：https://ai.google.dev/gemini-api/docs/interactions 。
+
 发布真实 Windows 安装包后，设置 INSTALLER_DOWNLOAD_URL、INSTALLER_SHA256、INSTALLER_SIZE（字节）。未设置有效下载信息时页面不提供假下载。主项目保留旧地址 https://ai-classroom-3-sand.vercel.app 作为同一个下载站的兼容入口。
 
 ## 独立管理站

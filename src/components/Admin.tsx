@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import type { PublicUser } from "../../shared/protocol";
 import { subjects } from "../../shared/protocol";
-import { api, json } from "../services/api";
+import { api, json, testProviderConnection } from "../services/api";
 import { Brand, ErrorNotice, errorText, Spinner, download } from "./ui";
 interface Config {
   id: string;
@@ -27,6 +27,7 @@ interface Config {
   vision: boolean;
   timeoutMs: number;
   hasKey: boolean;
+  apiMode?: string;
 }
 interface UserRow {
   id: string;
@@ -64,6 +65,7 @@ export function Admin({
     [mapping, setMapping] = useState<string[]>(["*"]),
     [timeout, setTimeoutValue] = useState(60000),
     [busy, setBusy] = useState(false),
+    [testProgress, setTestProgress] = useState(""),
     [models, setModels] = useState<string[]>([]),
     [users, setUsers] = useState<UserRow[]>([]),
     [logs, setLogs] = useState<
@@ -100,6 +102,7 @@ export function Admin({
     setBusy(true);
     setError("");
     setNotice("");
+    setTestProgress("");
     try {
       await fn();
     } catch (e) {
@@ -222,7 +225,7 @@ export function Admin({
         {busy && (
           <div className="admin-busy">
             <Spinner />
-            处理中…
+            {testProgress || "处理中…"}
           </div>
         )}
         {tab === "providers" && (
@@ -248,7 +251,7 @@ export function Admin({
             </h2>
             <p className="muted">
               {which === "gemini"
-                ? "直接接受 AQ 等格式密钥；使用 x-goog-api-key 认证，不根据前缀判断有效性。"
+                ? `接受 AQ 等格式密钥，无需修改前缀。当前接口：${configs.find((c) => c.id === "gemini")?.apiMode === "interactions" ? "Google Interactions（流式）" : "Google generateContent"}。测试读取已保存的配置，请先保存更改。`
                 : "自定义模型与地址。地址必须由服务端 AI_ALLOWED_HOSTS 允许。"}
             </p>
             <form
@@ -384,14 +387,10 @@ export function Admin({
                   disabled={busy}
                   onClick={() =>
                     void task(async () => {
-                      const r = await api<{
-                        reply: string;
-                        elapsedMs: number;
-                        model: string;
-                      }>("/admin/providers/" + which + "/test", {
-                        method: "POST",
-                        body: "{}",
-                      });
+                      const r = await testProviderConnection(
+                        which,
+                        setTestProgress,
+                      );
                       setNotice(
                         `真实连接成功 · ${r.model} · ${r.elapsedMs} ms · ${r.reply}`,
                       );
@@ -542,9 +541,7 @@ export function Admin({
                     <td>
                       {u.role} · {u.status}
                     </td>
-                    <td>
-                      用户名 / 密码
-                    </td>
+                    <td>用户名 / 密码</td>
                     <td>
                       <button
                         className="secondary"
@@ -593,7 +590,7 @@ export function Admin({
             </table>
           </div>
         )}
-        {tab === "questions" && <QuestionAdmin/>}
+        {tab === "questions" && <QuestionAdmin />}
         {tab === "requests" && (
           <div className="admin-card">
             {!requests.length ? (

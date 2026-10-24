@@ -12,11 +12,14 @@ import {
 import { AIProvider, providerError } from "./providers.js";
 import { skillRegistry } from "../shared/skills.js";
 import { subjectId } from "../shared/protocol.js";
+import type { ProviderTestEvent } from "../shared/protocol.js";
 export async function adminRoutes(app: FastifyInstance) {
   app.addHook("preHandler", adminOnly);
   app.get("/api/admin/overview", async () => ({
     users: await db.user.count(),
-    questions: (await import("../shared/questions.js")).questionCount + await db.questionRecord.count(),
+    questions:
+      (await import("../shared/questions.js")).questionCount +
+      (await db.questionRecord.count()),
     messages: await db.message.count(),
     executions: await db.skillExecution.count(),
   }));
@@ -26,6 +29,7 @@ export async function adminRoutes(app: FastifyInstance) {
         ...c,
         keyMask: "••••••••（已加密保存）",
         hasKey: !!encryptedKey,
+        apiMode: new AIProvider({ ...c, encryptedKey }).apiMode,
       }),
     ),
   }));
@@ -93,6 +97,54 @@ export async function adminRoutes(app: FastifyInstance) {
         code: error.code,
       });
       throw error;
+    }
+  });
+  app.post("/api/admin/providers/:id/test/stream", async (req, reply) => {
+    const id = z
+      .enum(["deepseek", "gemini"])
+      .parse((req.params as { id: string }).id);
+    const c = await db.aIProviderConfig.findUnique({ where: { id } });
+    if (!c) throw new AppError(404, "NOT_CONFIGURED", "请先保存配置");
+    const controller = new AbortController();
+    reply.hijack();
+    reply.raw.writeHead(200, {
+      "Content-Type": "text/event-stream; charset=utf-8",
+      "Cache-Control": "no-cache, no-transform",
+      "X-Accel-Buffering": "no",
+    });
+    const send = (event: ProviderTestEvent) => {
+      if (!reply.raw.destroyed)
+        reply.raw.write("data: " + JSON.stringify(event) + "\n\n");
+    };
+    const disconnect = () => controller.abort();
+    reply.raw.on("close", disconnect);
+    const heartbeat = setInterval(() => {
+      if (!reply.raw.destroyed) reply.raw.write(": heartbeat\n\n");
+    }, 5000);
+    try {
+      send({ type: "progress", message: "服务器已收到测试请求…" });
+      const result = await new AIProvider(c).testConnection(
+        controller.signal,
+        (message) => send({ type: "progress", message }),
+      );
+      await audit(req.account.id, "PROVIDER_TEST_OK", id, {
+        model: c.model,
+        apiMode: result.apiMode,
+        elapsedMs: result.elapsedMs,
+      });
+      send({ type: "result", ...result });
+    } catch (e) {
+      if (!controller.signal.aborted) {
+        const error = providerError(e);
+        await audit(req.account.id, "PROVIDER_TEST_FAILED", id, {
+          code: error.code,
+        });
+        send({ type: "error", code: error.code, message: error.message });
+      }
+    } finally {
+      clearInterval(heartbeat);
+      reply.raw.off("close", disconnect);
+      if (!reply.raw.destroyed) reply.raw.end();
     }
   });
   app.get("/api/admin/providers/:id/models", async (req) => {
@@ -229,9 +281,9 @@ export async function adminRoutes(app: FastifyInstance) {
         )
           throw new AppError(400, "INVALID_DELETE", "无法删除该账号");
         await tx.classroom.deleteMany({ where: { userId: r.userId } });
-        await tx.questionAttempt.deleteMany({where:{userId:r.userId}});
-        await tx.wrongProblem.deleteMany({where:{userId:r.userId}});
-        await tx.notebook.deleteMany({where:{userId:r.userId}});
+        await tx.questionAttempt.deleteMany({ where: { userId: r.userId } });
+        await tx.wrongProblem.deleteMany({ where: { userId: r.userId } });
+        await tx.notebook.deleteMany({ where: { userId: r.userId } });
         await tx.authSession.deleteMany({ where: { userId: r.userId } });
         await tx.deviceAccountBinding.updateMany({
           where: { userId: r.userId },

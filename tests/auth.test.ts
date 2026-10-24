@@ -1,4 +1,4 @@
-import {beforeAll,afterAll,describe,it,expect} from 'vitest';
+import {beforeAll,afterAll,describe,it,expect,vi} from 'vitest';
 import {execFileSync} from 'node:child_process';
 import {DatabaseSync} from 'node:sqlite';
 import {db} from '../server/db.js';
@@ -29,6 +29,8 @@ describe('用户名密码与真实学习数据集成',()=>{
   expect((await call('POST','/api/auth/register',{username:'学习者1',password:'test-password-123'},'')).statusCode).toBe(409);
   expect((await call('POST','/api/auth/login',{username:'学习者1',password:'incorrect-password'},'')).statusCode).toBe(401);
   expect((await call('GET','/api/admin/providers')).statusCode).toBe(403);
+  expect((await call('POST','/api/admin/providers/gemini/test/stream',{},'')).statusCode).toBe(401);
+  expect((await call('POST','/api/admin/providers/gemini/test/stream',{})).statusCode).toBe(403);
   expect((await app.inject({method:'POST',url:'/api/auth/logout',payload:{},headers:{cookie,origin:'https://evil.example'}})).statusCode).toBe(403);
  });
  it('题库不提前泄露答案，作答正确判分、错题自动归档',async()=>{
@@ -102,6 +104,16 @@ describe('用户名密码与真实学习数据集成',()=>{
   expect((await call('POST','/api/admin/questions/import',{items:[q]},admin)).json().imported).toBe(1);
   expect((await call('POST','/api/questions/q:math-001/attempts',{answer:'2'})).json().correct).toBe(true);
   expect(await db.administratorAuditLog.count({where:{action:'IMPORT_QUESTIONS'}})).toBe(1);
+ });
+ it('后台流式测试保留进度与认证错误并写入审计（协议回归）',async()=>{
+  const upstream=vi.spyOn(globalThis,'fetch').mockResolvedValue(new Response(JSON.stringify({error:{code:403,message:'private-upstream-error',status:'PERMISSION_DENIED'}}),{status:403}));
+  try{
+   const tested=await call('POST','/api/admin/providers/gemini/test/stream',{},admin);
+   expect(tested.statusCode).toBe(200);expect(tested.headers['content-type']).toContain('text/event-stream');
+   expect(tested.body).toContain('"type":"progress"');expect(tested.body).toContain('PROVIDER_FORBIDDEN');
+   expect(tested.body).not.toContain('"type":"result"');expect(tested.body).not.toContain('private-upstream-error');
+   expect(await db.administratorAuditLog.count({where:{action:'PROVIDER_TEST_FAILED'}})).toBe(1);
+  }finally{upstream.mockRestore();}
  });
  it('恢复码一次使用并撤销旧会话',async()=>{
   const r=await call('POST','/api/auth/register',{username:'恢复测试',password:'test-password-123'},'');const old=sessionCookie(r),p={username:'恢复测试',password:'new-password-456',recoveryCode:r.json().recoveryCode};

@@ -21,16 +21,31 @@ export interface GenerationInput {
 export class AIProvider {
   private controllers = new Set<AbortController>();
   constructor(public config: AIProviderConfig) {}
+  get apiMode() {
+    return this.config.id === "gemini" &&
+      process.env.GEMINI_API_MODE === "interactions"
+      ? "interactions"
+      : "content";
+  }
+  private get providerOptions() {
+    // Keep classroom history in our database; do not enable Google's
+    // default server-side interaction retention.
+    return this.apiMode === "interactions"
+      ? { google: { store: false } }
+      : undefined;
+  }
   private get key() {
     return decrypt(this.config.encryptedKey);
   }
   private model() {
     const baseURL = validateProviderUrl(this.config.baseUrl);
-    return this.config.id === "gemini"
-      ? createGoogleGenerativeAI({ apiKey: this.key, baseURL })(
-          this.config.model.replace(/^models\//, ""),
-        )
-      : createDeepSeek({ apiKey: this.key, baseURL })(this.config.model);
+    if (this.config.id !== "gemini")
+      return createDeepSeek({ apiKey: this.key, baseURL })(this.config.model);
+    const google = createGoogleGenerativeAI({ apiKey: this.key, baseURL });
+    const model = this.config.model.replace(/^models\//, "");
+    return this.apiMode === "interactions"
+      ? google.interactions(model)
+      : google(model);
   }
   private signal(signal?: AbortSignal) {
     return AbortSignal.any([
@@ -43,6 +58,7 @@ export class AIProvider {
       model: this.model(),
       system: input.system,
       messages: input.messages,
+      providerOptions: this.providerOptions,
       abortSignal: this.signal(input.signal),
       maxRetries: 0,
     });
@@ -52,6 +68,7 @@ export class AIProvider {
       model: this.model(),
       system: input.system,
       messages: input.messages,
+      providerOptions: this.providerOptions,
       abortSignal: this.signal(input.signal),
       maxRetries: 0,
     });
@@ -63,6 +80,7 @@ export class AIProvider {
       model: this.model(),
       instructions: input.system,
       tools: input.tools ?? {},
+      providerOptions: this.providerOptions,
       stopWhen: isStepCount(5),
       maxRetries: 0,
     });
@@ -93,7 +111,11 @@ export class AIProvider {
       signal: AbortSignal.timeout(15000),
       redirect: "error",
     });
-    if (!res.ok) throw providerError({ statusCode: res.status });
+    if (!res.ok)
+      throw providerError({
+        statusCode: res.status,
+        responseBody: await res.text(),
+      });
     const data = (await res.json()) as {
       models?: { name: string }[];
       data?: { id: string }[];
@@ -102,13 +124,64 @@ export class AIProvider {
       ? (data.models ?? []).map((m) => m.name.replace(/^models\//, ""))
       : (data.data ?? []).map((m) => m.id);
   }
-  async testConnection() {
+  async testConnection(
+    signal?: AbortSignal,
+    progress?: (message: string) => void,
+  ) {
     const started = performance.now();
-    const result = await this.generate({
+    if (this.config.id === "gemini") {
+      progress?.("正在验证 Google 认证与模型是否可访问…");
+      const url =
+        validateProviderUrl(this.config.baseUrl) +
+        "/models/" +
+        this.config.model.replace(/^models\//, "");
+      const response = await fetch(url, {
+        headers: { "x-goog-api-key": this.key },
+        signal: AbortSignal.any([
+          AbortSignal.timeout(15000),
+          ...(signal ? [signal] : []),
+        ]),
+        redirect: "error",
+      });
+      if (!response.ok)
+        throw providerError({
+          statusCode: response.status,
+          responseBody: await response.text(),
+        });
+      await response.body?.cancel();
+    }
+    progress?.(
+      this.config.id === "gemini"
+        ? "认证与模型检查通过，正在等待模型真实生成回复…"
+        : "正在验证认证并等待模型真实生成回复…",
+    );
+    let streamError: unknown;
+    const requestSignal = this.signal(signal);
+    const result = streamText({
+      model: this.model(),
       system: "Connection test. Reply OK only.",
       messages: [{ role: "user", content: "OK?" }],
+      providerOptions:
+        this.apiMode === "interactions"
+          ? { google: { store: false, thinkingLevel: "low" } }
+          : this.providerOptions,
+      abortSignal: requestSignal,
+      maxRetries: 0,
+      onError: ({ error }) => {
+        streamError = error;
+      },
     });
-    if (!result.text.trim())
+    let text = "";
+    try {
+      for await (const delta of result.textStream) text += delta;
+    } catch (e) {
+      throw streamError ?? e;
+    }
+    // The SDK can close a stream normally on cancellation without calling
+    // onError. Preserve the timeout/cancellation instead of reporting empty text.
+    requestSignal.throwIfAborted();
+    if (streamError) throw streamError;
+    if (!text.trim())
       throw new AppError(
         502,
         "EMPTY_RESPONSE",
@@ -118,13 +191,20 @@ export class AIProvider {
       ok: true,
       model: this.config.model,
       elapsedMs: Math.round(performance.now() - started),
-      reply: result.text.slice(0, 100),
+      reply: text.slice(0, 100),
+      apiMode: this.apiMode,
     };
   }
 }
-export function providerError(e: unknown) {
+export function providerError(e: unknown, depth = 0): AppError {
   if (e instanceof AppError) return e;
-  const p = e as { statusCode?: number; name?: string; responseBody?: string };
+  const p = (e ?? {}) as {
+    statusCode?: number;
+    name?: string;
+    responseBody?: string;
+    code?: string;
+    cause?: unknown;
+  };
   let reason = "";
   try {
     const body = JSON.parse(p.responseBody ?? "{}");
@@ -161,8 +241,41 @@ export function providerError(e: unknown) {
       "PROVIDER_RATE_LIMIT",
       "模型配额或速率受限，请稍后重试",
     );
-  if (p.name === "TimeoutError")
-    return new AppError(504, "PROVIDER_TIMEOUT", "模型请求超时，可安全重试");
+  if (p.statusCode === 404)
+    return new AppError(
+      502,
+      "PROVIDER_MODEL_NOT_FOUND",
+      "找不到此模型或接口，请读取模型列表并检查模型标识与 API 地址",
+    );
+  if (
+    p.statusCode === 503 ||
+    /UNAVAILABLE|high demand|overloaded/i.test(reason)
+  )
+    return new AppError(
+      503,
+      "PROVIDER_UNAVAILABLE",
+      "Google / 模型服务当前繁忙或暂时不可用，请稍后重试；这不表示密钥无效",
+    );
+  if (p.statusCode === 408 || p.statusCode === 504 || p.name === "TimeoutError")
+    return new AppError(
+      504,
+      "PROVIDER_TIMEOUT",
+      "模型生成超时，未确认生成成功。服务可能繁忙，可稍后重试或在后台调大请求超时",
+    );
+  if (p.cause && depth < 3) {
+    const cause = providerError(p.cause, depth + 1);
+    if (["PROVIDER_TIMEOUT", "PROVIDER_NETWORK_ERROR"].includes(cause.code))
+      return cause;
+  }
+  if (
+    p.name === "TypeError" ||
+    /^(UND_ERR_|ECONN|ENOTFOUND|EAI_AGAIN|ETIMEDOUT)/.test(p.code ?? "")
+  )
+    return new AppError(
+      502,
+      "PROVIDER_NETWORK_ERROR",
+      "服务器到模型服务的网络连接中断，请稍后重试；无需修改密钥前缀",
+    );
   return new AppError(
     502,
     "PROVIDER_FAILED",
