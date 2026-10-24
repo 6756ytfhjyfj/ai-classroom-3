@@ -20,7 +20,7 @@ $info=Join-Path $generated 'PayloadInfo.cs'
 $website='https://onclasstime.vercel.app'
 [IO.File]::WriteAllText($info,('public static class PayloadInfo { public const string Hash=""; public const string Website="'+$website+'"; }'))
 $source=Join-Path $repo 'installer\Setup.cs'
-$brand='/resource:'+(Join-Path $repo 'public\brand\logo-transparent.png')+',brand.png'
+$brand='/resource:'+(Join-Path $repo 'public\brand\logo.wpf.xaml')+',brand.xaml'
 $icon='/win32icon:'+(Join-Path $repo 'build\icon.ico')
 $manifest='/win32manifest:'+(Join-Path $repo 'installer\app.manifest')
 $uninstall=Join-Path $repo 'release\win-unpacked\ONclasstime-Uninstall.exe'

@@ -107,7 +107,7 @@ export function Spinner() {
 export function Brand({ small = false }: { small?: boolean }) {
   return (
     <div className={"brand brand-asset " + (small ? "small" : "")}>
-      <span className="brand-logo"><img src="/brand/logo-transparent.png" alt="ONclasstime"/></span>
+      <span className="brand-logo"><img className="brand-full-logo" src="/brand/logo.svg" alt="ONclasstime"/><img className="brand-emblem" src="/brand/emblem.svg" alt="" aria-hidden="true"/></span>
       <small className="brand-watermark">Power By ONtimeclass</small>
     </div>
   );

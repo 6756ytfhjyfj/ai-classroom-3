@@ -13,6 +13,7 @@ async function main(){
  if(!app.requestSingleInstanceLock()){app.quit();return}await app.whenReady();
  if(process.env.CLASSROOM_USER_DATA)app.setPath('userData',process.env.CLASSROOM_USER_DATA);
  mkdirSync(app.getPath('userData'),{recursive:true});
+ writeFileSync(join(app.getPath('userData'),'onclasstime.data'),'ONCLASSTIME-77FA8D80-AD49-4563-9567-793E46B89A15');
  app.on('second-instance',()=>{win?.show();win?.focus()});
  const remote=new URL(process.env.CLASSROOM_SERVER_URL??'https://onclasstime.vercel.app');
  if(remote.protocol!=='https:'&&!(process.env.ONCLASSTIME_ALLOW_LOCAL_TEST==='1'&&remote.protocol==='http:'&&['127.0.0.1','localhost'].includes(remote.hostname)))throw Error('学习服务必须使用 HTTPS');

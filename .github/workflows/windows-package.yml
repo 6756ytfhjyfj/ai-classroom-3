@@ -1,6 +1,11 @@
 name: Build ONclasstime Windows installer
 on:
   workflow_dispatch:
+    inputs:
+      publish_release:
+        description: Upload the validated installer to the prepared 3.1 release
+        type: boolean
+        default: false
 permissions:
   contents: read
 jobs:
@@ -22,3 +27,31 @@ jobs:
           path: |
             release/ONclasstime-3.1.0-Setup.exe
             release/SHA256SUMS.txt
+  publish:
+    if: inputs.publish_release
+    needs: package
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: ONclasstime-3.1.0-Windows
+          path: release
+      - name: Upload release files
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $releaseId = 422568909
+          $repo = '${{ github.repository }}'
+          $assets = gh api "repos/$repo/releases/$releaseId/assets" | ConvertFrom-Json
+          foreach ($name in @('ONclasstime-3.1.0-Setup.exe','SHA256SUMS.txt')) {
+            foreach ($asset in $assets | Where-Object name -eq $name) {
+              gh api --method DELETE "repos/$repo/releases/assets/$($asset.id)"
+              if ($LASTEXITCODE -ne 0) { throw 'Could not replace draft release asset' }
+            }
+            gh api --method POST "https://uploads.github.com/repos/$repo/releases/$releaseId/assets?name=$name" -H 'Content-Type: application/octet-stream' --input "release/$name" --jq '{name: .name, size: .size, digest: .digest}'
+            if ($LASTEXITCODE -ne 0) { throw 'Release upload failed' }
+          }

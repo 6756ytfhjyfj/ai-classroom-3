@@ -4,13 +4,14 @@ import {motion} from 'motion/react';
 import type {PublicUser} from '../../shared/protocol';
 import {api,json} from '../services/api';
 import {Brand,ErrorNotice,errorText,download,Modal} from './ui';
+import {WelcomeBackdrop} from './WelcomeBackdrop';
 export function Auth({onLogin,admin=false}:{onLogin:(u:PublicUser)=>void;admin?:boolean}){
  const [mode,setMode]=useState<'login'|'register'|'recover'>('login'),[username,setUsername]=useState(''),[password,setPassword]=useState(''),[confirm,setConfirm]=useState(''),[show,setShow]=useState(false),[remember,setRemember]=useState(true),[busy,setBusy]=useState(false),[error,setError]=useState(''),[code,setCode]=useState(''),[newCode,setNewCode]=useState(''),[pending,setPending]=useState<PublicUser|null>(null);
  async function submit(e:FormEvent){e.preventDefault();if(mode==='register'&&confirm!==password){setError('两次密码不一致');return}setBusy(true);setError('');try{
   if(mode==='recover'){const r=await api<{recoveryCode:string}>('/auth/recover',{method:'POST',body:json({username,password,recoveryCode:code})});setNewCode(r.recoveryCode);setMode('login');setPassword('')}
   else{const r=await api<{user:PublicUser;recoveryCode?:string}>('/auth/'+mode,{method:'POST',body:json({username,password,remember})});if(admin&&r.user.role!=='ADMIN'){await api('/auth/logout',{method:'POST',body:'{}'});throw Error('此账号没有管理员权限')}if(r.recoveryCode){setNewCode(r.recoveryCode);setPending(r.user)}else onLogin(r.user)}
  }catch(e){setError(errorText(e))}finally{setBusy(false)}}
- return <main className='auth-page on-auth'>
+ return <main className='auth-page on-auth'><WelcomeBackdrop/>
   <div className='auth-art'><Brand/><div className='auth-intro'><span className='eyebrow'>YOUR TIME TO UNDERSTAND</span><h1>让学习，<br/>进入<span>你的时间。</span></h1><p>写下问题，听懂原理，练会方法。<br/>把每一点好奇，变成真实的进步。</p></div><div className='on-auth-visual' aria-hidden='true'><span className='orbit-ring'/><span className='orbit-ring second'/><div className='time-symbol'>ON<span>classtime</span></div><b className='visual-equation'>y = ax²</b><i className='visual-label'>理解，在此发生</i></div><div className='auth-features'><span><PenLine size={17}/>全屏手写</span><span><BookOpen size={17}/>题库与笔记</span><span><AudioLines size={17}/>AI 课堂</span></div><small className='auth-foot'>ONCLASSTIME <span>为专注学习而生</span></small></div>
   <div className='auth-form-side'><motion.div className='auth-form-card' key={mode} initial={{opacity:0,y:10}} animate={{opacity:1,y:0}}><div className='auth-top-line'><span>{admin?<><ShieldCheck size={16}/> 独立管理控制台</>:'每一次开始，都算数。'}</span><small>3.1</small></div><h2>{mode==='register'?'开启你的学习时间':mode==='recover'?'找回你的账号':admin?'管理员验证':'欢迎回来'}</h2><p className='auth-description'>{mode==='register'?'只需用户名和密码，就可以开始。':mode==='recover'?'使用注册时保存的恢复码，设置新密码。':admin?'请输入管理员账号与密码，验证后进入。':'登录后继续你的课堂、错题和笔记。'}</p>
   {!admin&&mode!=='recover'&&<div className='auth-tabs'><button className={mode==='login'?'active':''} onClick={()=>{setMode('login');setError('')}}>登录</button><button className={mode==='register'?'active':''} onClick={()=>{setMode('register');setError('')}}>注册账号</button></div>}
