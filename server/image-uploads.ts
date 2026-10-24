@@ -155,7 +155,7 @@ export async function imageUploadRoutes(app: FastifyInstance) {
     // Fetch only this slice from PostgreSQL/SQLite rather than the entire image.
     const rows = await db.$queryRaw<
       Array<{ data: string | null; mime: string | null; bytes: number }>
-    >`SELECT substr("imageData", ${index * IMAGE_CHUNK_CHARS + 1}, ${IMAGE_CHUNK_CHARS}) AS "data", "imageMime" AS "mime", "imageBytes" AS "bytes" FROM "WrongProblem" WHERE "id" = ${id} AND "userId" = ${req.account.id}`;
+    >`SELECT substr("imageData", CAST(${index * IMAGE_CHUNK_CHARS + 1} AS INTEGER), CAST(${IMAGE_CHUNK_CHARS} AS INTEGER)) AS "data", "imageMime" AS "mime", "imageBytes" AS "bytes" FROM "WrongProblem" WHERE "id" = ${id} AND "userId" = ${req.account.id}`;
     const row = rows[0];
     if (!row?.data || !row.mime)
       throw new AppError(404, "IMAGE_NOT_FOUND", "图片不存在");
