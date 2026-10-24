@@ -20,3 +20,6 @@ playwright-report/
 desktop-app/
 admin-site/dist/
 installer/generated/
+
+# Private verification fixture identifiers
+docs/qa/**/fixture-id.json

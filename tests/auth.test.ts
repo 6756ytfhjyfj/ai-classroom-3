@@ -3,6 +3,8 @@ import {execFileSync} from 'node:child_process';
 import {DatabaseSync} from 'node:sqlite';
 import {db} from '../server/db.js';
 import {createApp} from '../server/app.js';
+import {createHash} from 'node:crypto';
+import {IMAGE_CHUNK_BYTES, MAX_IMAGE_BYTES} from '../shared/image-limits.js';
 let app:Awaited<ReturnType<typeof createApp>>,cookie='',other='',admin='';
 const call=(method:'GET'|'POST'|'PUT'|'PATCH'|'DELETE',url:string,payload?:object,cookieValue=cookie)=>app.inject({method,url,...(payload?{payload}:{}),headers:cookieValue?{cookie:cookieValue}:{}});
 const sessionCookie=(r:{headers:Record<string,unknown>})=>String(r.headers['set-cookie']).split(';')[0];
@@ -44,6 +46,37 @@ describe('用户名密码与真实学习数据集成',()=>{
   expect((await call('POST','/api/wrongs',{subjectId:'math',title:'假图片',imageData:'data:image/png;base64,'+Buffer.from('not a real image file').toString('base64')})).statusCode).toBe(400);
   expect((await call('PATCH',`/api/wrongs/${id}`,{expectedVersion:0,note:'已订正'})).json().revision).toBe(1);
   expect((await call('PATCH',`/api/wrongs/${id}`,{expectedVersion:0,note:'过期覆盖'})).statusCode).toBe(409);
+ });
+ it('10 MB 图片分段上传、读取无损，越界、乱序、越权与重复提交保护',async()=>{
+  const bytes=Buffer.alloc(MAX_IMAGE_BYTES,37);Buffer.from([137,80,78,71,13,10,26,10]).copy(bytes);
+  const sha256=createHash('sha256').update(bytes).digest('hex');
+  expect((await call('POST','/api/image-uploads',{mime:'image/png',bytes:MAX_IMAGE_BYTES+1,sha256})).statusCode).toBe(400);
+  const start=await call('POST','/api/image-uploads',{mime:'image/png',bytes:bytes.length,sha256});expect(start.statusCode).toBe(200);const id=start.json().id;
+  const first={data:bytes.subarray(0,IMAGE_CHUNK_BYTES).toString('base64')};
+  expect((await call('PUT',`/api/image-uploads/${id}/chunks/0`,first,other)).statusCode).toBe(404);
+  expect((await call('PUT',`/api/image-uploads/${id}/chunks/${IMAGE_CHUNK_BYTES}`,first)).statusCode).toBe(409);
+  expect((await call('POST','/api/wrongs',{subjectId:'math',title:'10 MB',imageUploadId:id})).statusCode).toBe(409);
+  for(let offset=0;offset<bytes.length;offset+=IMAGE_CHUNK_BYTES){const r=await call('PUT',`/api/image-uploads/${id}/chunks/${offset}`,{data:bytes.subarray(offset,offset+IMAGE_CHUNK_BYTES).toString('base64')});expect(r.statusCode).toBe(200);}
+  expect((await call('PUT',`/api/image-uploads/${id}/chunks/0`,first)).statusCode).toBe(200);
+  const payload={subjectId:'math',title:'10 MB',imageUploadId:id};const saved=await call('POST','/api/wrongs',payload);expect(saved.statusCode).toBe(200);expect(saved.json().imageBytes).toBe(MAX_IMAGE_BYTES);
+  expect((await call('POST','/api/wrongs',payload)).json().id).toBe(id);expect(await db.imageUpload.count({where:{id}})).toBe(0);
+  const chunks:Buffer[]=[];for(let index=0;index<Math.ceil(bytes.length/IMAGE_CHUNK_BYTES);index++){const r=await call('GET',`/api/wrongs/${id}/image/chunks/${index}`);expect(r.statusCode).toBe(200);expect(r.body.length).toBeLessThan(2*1024*1024);chunks.push(Buffer.from(r.json().data,'base64'));}
+  expect(createHash('sha256').update(Buffer.concat(chunks)).digest('hex')).toBe(sha256);
+  expect((await call('GET',`/api/wrongs/${id}/image/chunks/0`,undefined,other)).statusCode).toBe(404);
+  expect((await call('POST','/api/image-uploads',{mime:'image/png',bytes:MAX_IMAGE_BYTES,sha256})).statusCode).toBe(409);
+  await call('DELETE',`/api/wrongs/${id}`);
+ });
+ it('分段校验失败不会保存错题，取消、过期与并发预留保护',async()=>{
+  const p={mime:'image/png',bytes:12,sha256:'0'.repeat(64)};
+  const r=await call('POST','/api/image-uploads',p),id=r.json().id;
+  await call('PUT',`/api/image-uploads/${id}/chunks/0`,{data:Buffer.from([137,80,78,71,13,10,26,10,0,0,0,0]).toString('base64')});
+  expect((await call('POST','/api/wrongs',{subjectId:'math',title:'校验失败',imageUploadId:id})).json().code).toBe('IMAGE_INTEGRITY');
+  expect((await call('DELETE',`/api/image-uploads/${id}`,undefined,other)).statusCode).toBe(200);expect(await db.imageUpload.count({where:{id}})).toBe(1);
+  await db.imageUpload.update({where:{id},data:{expiresAt:new Date(0)}});
+  expect((await call('PUT',`/api/image-uploads/${id}/chunks/0`,{data:Buffer.alloc(12).toString('base64')})).statusCode).toBe(404);
+  const next=await call('POST','/api/image-uploads',p);expect(await db.imageUpload.count({where:{id}})).toBe(0);await call('DELETE',`/api/image-uploads/${next.json().id}`);
+  const results=await Promise.all([call('POST','/api/image-uploads',{...p,bytes:MAX_IMAGE_BYTES}),call('POST','/api/image-uploads',{...p,bytes:MAX_IMAGE_BYTES})]);expect(results.map(r=>r.statusCode).sort()).toEqual([200,409]);
+  for(const r of results)if(r.statusCode===200)await call('DELETE',`/api/image-uploads/${r.json().id}`);
  });
  it('笔记持久化、并发版本保护和账号隔离',async()=>{
   const book=(await call('POST','/api/notebooks',{name:'我的数学'})).json();
